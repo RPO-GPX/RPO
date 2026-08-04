@@ -173,11 +173,7 @@
   .rank-badge{ font-weight:800; color:var(--muted); }
   .taux-tag{ font-weight:700; padding:3px 10px; border-radius:999px; font-size:12.5px; display:inline-block; }
   .agence-empty{ color:var(--muted); font-style:italic; font-size:12.5px; }
-  .hist-panel{
-    background:var(--card); border:1px solid var(--line); border-radius:10px; margin-top:16px; padding:16px 18px; display:none;
-  }
-  .hist-panel.open{ display:block; }
-  .hist-panel h3{ margin:0 0 10px; font-size:14px; }
+  tr.history-expand td{ background:#faf9f7; padding:14px 18px; border-top:none; }
   .hist-row{ display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-top:1px dashed var(--line); font-size:12.5px; }
   .hist-row:first-child{ border-top:none; }
   .hist-row .load-btn{ font-size:11px; color:var(--red); background:none; border:none; cursor:pointer; font-weight:700; }
@@ -368,13 +364,9 @@
       </div>
     </div>
     <table class="dash">
-      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th></tr></thead>
+      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th></tr></thead>
       <tbody id="dashBody"></tbody>
     </table>
-    <div class="hist-panel" id="histPanel">
-      <h3 id="histTitle">Historique</h3>
-      <div id="histBody"></div>
-    </div>
   </div>
 </div>
 
@@ -711,6 +703,15 @@ async function deleteRecordById(id){
   if(error) throw error;
 }
 
+async function approveRecordById(id){
+  const { error } = await sb.from("visites").update({
+    approved: true,
+    approved_at: new Date().toISOString(),
+    approved_by: currentUserName || currentUser.email
+  }).eq("id", id);
+  if(error) throw error;
+}
+
 async function loadRecordById(id){
   const { data, error } = await sb.from("visites").select("*").eq("id", id).single();
   if(error || !data) throw (error || new Error("introuvable"));
@@ -1042,7 +1043,7 @@ async function buildDashboard(){
     const tr = document.createElement("tr");
     if(r.rec){
       tr.className = "clickable";
-      tr.addEventListener("click", ()=> openHistory(r.name));
+      tr.addEventListener("click", ()=> openHistory(r.name, tr));
       tr.innerHTML = `
         <td class="rank-badge">#${rank}</td>
         <td><b>${r.name}</b></td>
@@ -1050,12 +1051,13 @@ async function buildDashboard(){
         <td style="font-size:11.5px;color:var(--muted);">${r.rec.rpo_nom||r.rec.rpo_email||"—"}</td>
         <td><span class="taux-tag" style="${tierTagStyle(r.rec.taux)}">${r.rec.taux==null?"n/a":Math.round(r.rec.taux*100)+"%"}</span></td>
         <td>${apprLabel(r.rec.taux)}</td>
+        <td>${r.rec.approved ? '<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé</span>' : '<span class="taux-tag" style="background:#eee;color:#888;">En attente</span>'}</td>
       `;
     } else {
       tr.innerHTML = `
         <td class="rank-badge">–</td>
         <td><b>${r.name}</b></td>
-        <td colspan="4" class="agence-empty">Aucune visite enregistrée</td>
+        <td colspan="5" class="agence-empty">Aucune visite enregistrée</td>
       `;
     }
     tbody.appendChild(tr);
@@ -1065,17 +1067,27 @@ async function buildDashboard(){
     + (currentRole==="manager" ? " (toutes agences, temps réel)" : "");
 }
 
-async function openHistory(agenceName){
+async function openHistory(agenceName, anchorRow){
+  // repli : si une autre ligne d'historique est déjà ouverte, on la retire
+  const existingExpand = document.querySelector("tr.history-expand");
+  const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow;
+  if(existingExpand) existingExpand.remove();
+  if(wasOpenForThisRow) return; // clic sur la même ligne : on referme, c'est tout
+
   let all = [];
   try{ all = await getAllVisites(); }catch(e){ showToast("Impossible de charger l'historique.", 4000); return; }
   const recs = all.filter(x=> (x.agence||"").trim().toLowerCase() === agenceName.trim().toLowerCase())
                    .sort((a,b)=> new Date(b.date)-new Date(a.date));
-  const panel = document.getElementById("histPanel");
-  document.getElementById("histTitle").textContent = "Historique — "+agenceName;
-  const body = document.getElementById("histBody");
-  body.innerHTML = "";
+
+  const nCols = anchorRow.children.length;
+  const expandRow = document.createElement("tr");
+  expandRow.className = "history-expand";
+  const td = document.createElement("td");
+  td.colSpan = nCols;
+  expandRow.appendChild(td);
+
   if(recs.length===0){
-    body.innerHTML = `<p style="color:var(--muted);font-size:12.5px;font-style:italic;">Plus aucune visite enregistrée pour cette agence.</p>`;
+    td.innerHTML = `<p style="color:var(--muted);font-size:12.5px;font-style:italic;margin:0;">Plus aucune visite enregistrée pour cette agence.</p>`;
   }
   recs.forEach(r=>{
     const row = document.createElement("div");
@@ -1085,11 +1097,17 @@ async function openHistory(agenceName){
     row.style.gap = "4px";
     const actions = currentRole === "manager"
       ? `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`
-      : `<button class="load-btn" data-id="${r.id}">Ouvrir dans Visite →</button>
-         <button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+        + (r.approved ? "" : `<button class="load-btn" data-approve="${r.id}" style="color:#1c6b2e;">✓ Approuver</button>`)
+      : r.approved
+        ? `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`
+        : `<button class="load-btn" data-id="${r.id}">Ouvrir dans Visite →</button>
+           <button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+    const statusBadge = r.approved
+      ? `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé par ${r.approved_by||"manager"}</span>`
+      : `<span class="taux-tag" style="background:#eee;color:#888;">En attente d'approbation</span>`;
     row.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span>${r.date||"-"} — <span class="taux-tag" style="${tierTagStyle(r.taux)}">${r.taux==null?"n/a":Math.round(r.taux*100)+"%"}</span></span>
+        <span>${r.date||"-"} — <span class="taux-tag" style="${tierTagStyle(r.taux)}">${r.taux==null?"n/a":Math.round(r.taux*100)+"%"}</span> ${statusBadge}</span>
         <span style="display:flex;gap:14px;">${actions}</span>
       </div>
       <div style="font-size:11px;color:var(--muted);">
@@ -1119,9 +1137,24 @@ async function openHistory(agenceName){
           await deleteRecordById(r.id);
           if(currentRecordId === r.id) currentRecordId = null;
           showToast("Visite supprimée.");
-          buildDashboard();
-          openHistory(agenceName);
-        }catch(e){ showToast("Suppression impossible — réessaie.", 4000); }
+          await buildDashboard();
+          const newRow = [...document.querySelectorAll("#dashBody tr.clickable")].find(x=>x.textContent.includes(agenceName));
+          if(newRow) openHistory(agenceName, newRow);
+        }catch(e){ showToast("Suppression impossible — cette visite a peut-être déjà été approuvée.", 5000); }
+      });
+    }
+    const approveBtn = row.querySelector("[data-approve]");
+    if(approveBtn){
+      approveBtn.addEventListener("click", async ()=>{
+        const ok = await askConfirm(`Approuver la visite du ${r.date||"-"} pour ${agenceName} ?`);
+        if(!ok) return;
+        try{
+          await approveRecordById(r.id);
+          showToast("Visite approuvée.");
+          await buildDashboard();
+          const newRow = [...document.querySelectorAll("#dashBody tr.clickable")].find(x=>x.textContent.includes(agenceName));
+          if(newRow) openHistory(agenceName, newRow);
+        }catch(e){ showToast("Approbation impossible — réessaie.", 4000); }
       });
     }
     const viewBtn = row.querySelector("[data-view]");
@@ -1132,9 +1165,11 @@ async function openHistory(agenceName){
         setTimeout(()=> window.print(), 50);
       });
     }
-    body.appendChild(row);
+    td.appendChild(row);
   });
-  panel.classList.add("open");
+
+  anchorRow.after(expandRow);
+  expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 function switchView(name){
   document.getElementById("viewInspection").classList.toggle("active", name==="inspection");
