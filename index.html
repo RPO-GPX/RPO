@@ -325,6 +325,7 @@
   <span class="taux-pill" id="saveStatus" style="font-size:11.5px;">Enregistré</span>
   <button class="btn ghost" id="btnNew">Nouvelle visite</button>
   <button class="btn ghost" id="btnExpandAll">Tout déplier</button>
+  <button class="btn ghost" id="btnClose">Clôturer la visite</button>
   <button class="btn primary" id="btnPrint">Imprimer la synthèse</button>
   <button class="btn ghost" id="btnLogout">Déconnexion</button>
 </div>
@@ -340,7 +341,16 @@
     <div class="field"><label>Nombre d'employés</label><input id="fEmployes" type="number" min="0" placeholder="ex. 8"></div>
     <div class="field"><label>Nombre de livreurs</label><input id="fLivreurs" type="number" min="0" placeholder="ex. 4"></div>
     <div class="field"><label>Nombre d'agents de sécurité</label><input id="fSecurite" type="number" min="0" placeholder="ex. 1"></div>
+    <div class="field"><label>Nombre d'agents CS</label><input id="fAgentsCS" type="number" min="0" placeholder="ex. 3"></div>
+    <div class="field"><label>Nombre d'agents polyvalents</label><input id="fAgentsPoly" type="number" min="0" placeholder="ex. 2"></div>
   </div>
+
+  <div class="header-card" style="margin-top:12px;">
+    <div class="field"><label>Colis expédiés (total)</label><input id="fColisExpedies" type="number" min="0" placeholder="ex. 320"></div>
+    <div class="field"><label>Colis livrés par CS (agence)</label><input id="fColisLivresCS" type="number" min="0" placeholder="ex. 240"></div>
+    <div class="field"><label>Colis livrés par livreurs (domicile)</label><input id="fColisLivresLivreurs" type="number" min="0" placeholder="ex. 110"></div>
+  </div>
+  <div style="max-width:1040px;margin:10px auto 0;padding:0 22px;" id="staffingLive"></div>
 
   <div class="wrap" id="sections"></div>
 
@@ -364,7 +374,7 @@
       </div>
     </div>
     <table class="dash">
-      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th></tr></thead>
+      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th><th>Effectif</th></tr></thead>
       <tbody id="dashBody"></tbody>
     </table>
   </div>
@@ -396,6 +406,9 @@
   <div class="pv-row"><b>Nombre d'employés :</b><span id="pvEmployes">-</span></div>
   <div class="pv-row"><b>Nombre de livreurs :</b><span id="pvLivreurs">-</span></div>
   <div class="pv-row"><b>Agents de sécurité :</b><span id="pvSecurite">-</span></div>
+  <div class="pv-row"><b>Agents CS / Polyvalents :</b><span id="pvAgentsCSPoly">-</span></div>
+  <div class="pv-sub">Diagnostic effectif (charge de travail / colis)</div>
+  <div id="pvStaffing" style="padding:8px 2px;font-size:12px;"></div>
   <div class="pv-taux"><b style="font-size:14px;">TAUX DE CONFORMITÉ GLOBAL (pondéré)</b><span class="val" id="pvTaux">–</span></div>
   <div class="pv-appr" id="pvAppr">–</div>
 
@@ -636,7 +649,8 @@ const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence
 // ÉTAT
 // ======================================================================
 let state = {
-  header:{ agence:"", date:"", superficie:"", employes:"", livreurs:"", securite:"" },
+  header:{ agence:"", date:"", superficie:"", employes:"", livreurs:"", securite:"",
+    agentsCS:"", agentsPoly:"", colisExpedies:"", colisLivresCS:"", colisLivresLivreurs:"" },
   status:{},   // id -> "conforme" | "nonconforme" | "na" | ""
   anom:{}      // id -> texte
 };
@@ -675,6 +689,11 @@ async function persistNow(attempt){
       nb_employes: state.header.employes || null,
       nb_livreurs: state.header.livreurs || null,
       nb_agents_securite: state.header.securite || null,
+      agents_cs: state.header.agentsCS || null,
+      agents_polyvalents: state.header.agentsPoly || null,
+      colis_expedies: state.header.colisExpedies || null,
+      colis_livres_cs: state.header.colisLivresCS || null,
+      colis_livres_livreurs: state.header.colisLivresLivreurs || null,
       rpo_email: currentUser.email,
       rpo_nom: currentUserName || currentUser.email,
       statuts: state.status,
@@ -712,12 +731,36 @@ async function approveRecordById(id){
   if(error) throw error;
 }
 
+async function revokeApprovalById(id){
+  const { error } = await sb.from("visites").update({
+    approved: false,
+    approved_at: null,
+    approved_by: null
+  }).eq("id", id);
+  if(error) throw error;
+}
+
+async function closeRecordById(id){
+  const { error } = await sb.from("visites").update({
+    closed: true,
+    closed_at: new Date().toISOString()
+  }).eq("id", id);
+  if(error) throw error;
+}
+
+async function reopenRecordById(id){
+  const { error } = await sb.from("visites").update({ closed: false, closed_at: null }).eq("id", id);
+  if(error) throw error;
+}
+
 async function loadRecordById(id){
   const { data, error } = await sb.from("visites").select("*").eq("id", id).single();
   if(error || !data) throw (error || new Error("introuvable"));
   state = {
     header:{ agence:data.agence, date:data.date, superficie:data.superficie||"",
-      employes:data.nb_employes||"", livreurs:data.nb_livreurs||"", securite:data.nb_agents_securite||"" },
+      employes:data.nb_employes||"", livreurs:data.nb_livreurs||"", securite:data.nb_agents_securite||"",
+      agentsCS:data.agents_cs||"", agentsPoly:data.agents_polyvalents||"",
+      colisExpedies:data.colis_expedies||"", colisLivresCS:data.colis_livres_cs||"", colisLivresLivreurs:data.colis_livres_livreurs||"" },
     status: data.statuts || {},
     anom: data.anomalies || {}
   };
@@ -861,6 +904,67 @@ function sectionStats(sec){
   return {conforme,nonconforme,na,taux};
 }
 
+// ======================================================================
+// RATIOS DE PRODUCTIVITÉ / EFFECTIFS
+// ======================================================================
+const SEUILS_PRODUCTIVITE = { poly: 160, cs: 80, liv: 30 };
+const TOLERANCE = 0.10; // ±10% autour du seuil = effectif jugé normal
+
+function computeRatio(num, den){
+  const n = parseFloat(num), d = parseFloat(den);
+  if(!d || d<=0 || isNaN(n)) return null;
+  return n/d;
+}
+function staffingStatus(moyenne, seuil){
+  if(moyenne==null || isNaN(moyenne)) return null;
+  const ecart = (moyenne - seuil) / seuil;
+  if(ecart > TOLERANCE) return "sous";  // charge/agent trop élevée -> pas assez de monde
+  if(ecart < -TOLERANCE) return "sur";  // charge/agent trop faible -> trop de monde
+  return "ok";
+}
+function staffingLabel(status){
+  return { sous:"Sous-effectif", sur:"Sur-effectif", ok:"Effectif normal" }[status] || "—";
+}
+function staffingColor(status){
+  return { sous:["#fbe3e3","#a11313"], sur:["#fdf1d6","#8a5a00"], ok:["#e3f3e6","#1c6b2e"] }[status] || ["#eee","#888"];
+}
+function computeStaffingFromHeader(h){
+  const poly = computeRatio(h.colisExpedies, h.agentsPoly);
+  const cs = computeRatio(h.colisLivresCS, h.agentsCS);
+  const liv = computeRatio(h.colisLivresLivreurs, h.livreurs);
+  return {
+    poly: { moyenne: poly, status: staffingStatus(poly, SEUILS_PRODUCTIVITE.poly) },
+    cs: { moyenne: cs, status: staffingStatus(cs, SEUILS_PRODUCTIVITE.cs) },
+    liv: { moyenne: liv, status: staffingStatus(liv, SEUILS_PRODUCTIVITE.liv) },
+  };
+}
+function staffingBadgesHTML(staffing, compact){
+  const parts = [
+    ["Polyv.", staffing.poly], ["CS", staffing.cs], ["Livreur", staffing.liv]
+  ];
+  return parts.map(([label, s])=>{
+    if(s.status===null) return compact ? "" : `<span style="color:#bbb;">${label} : —</span>`;
+    const [bg,fg] = staffingColor(s.status);
+    const moy = Math.round(s.moyenne);
+    return `<span class="taux-tag" style="background:${bg};color:${fg};margin-right:4px;" title="${label} : ${moy} colis/agent/jour">${label} ${moy} · ${staffingLabel(s.status)}</span>`;
+  }).filter(Boolean).join(compact ? "" : " ");
+}
+
+// verdict global : priorité au sous-effectif (le plus critique), puis sur-effectif, sinon normal
+function overallStaffingStatus(staffing){
+  const statuses = [staffing.poly.status, staffing.cs.status, staffing.liv.status];
+  if(statuses.every(s=>s===null)) return null;
+  if(statuses.includes("sous")) return "sous";
+  if(statuses.includes("sur")) return "sur";
+  return "ok";
+}
+function overallStaffingBadgeHTML(staffing){
+  const status = overallStaffingStatus(staffing);
+  if(status===null) return '<span style="color:#ccc;font-size:11px;">—</span>';
+  const [bg,fg] = staffingColor(status);
+  return `<span class="taux-tag" style="background:${bg};color:${fg};">${staffingLabel(status)}</span>`;
+}
+
 function computeGlobals(){
   let sumW=0, sumWT=0, gConf=0, gNonConf=0;
   const rows = [];
@@ -949,6 +1053,12 @@ function buildPrintView(){
   document.getElementById("pvEmployes").textContent = state.header.employes || "-";
   document.getElementById("pvLivreurs").textContent = state.header.livreurs || "-";
   document.getElementById("pvSecurite").textContent = state.header.securite || "-";
+  document.getElementById("pvAgentsCSPoly").textContent =
+    (state.header.agentsCS || "-") + " / " + (state.header.agentsPoly || "-");
+  const staffing = computeStaffingFromHeader(state.header);
+  const staffingHTML = staffingBadgesHTML(staffing, false);
+  document.getElementById("pvStaffing").innerHTML = staffingHTML
+    || `<span style="color:#999;font-style:italic;">Données colis/effectifs insuffisantes pour le calcul.</span>`;
   document.getElementById("pvTaux").textContent = weighted===null?"–":Math.round(weighted*100)+"%";
 
   const apprEl = document.getElementById("pvAppr");
@@ -1051,13 +1161,21 @@ async function buildDashboard(){
         <td style="font-size:11.5px;color:var(--muted);">${r.rec.rpo_nom||r.rec.rpo_email||"—"}</td>
         <td><span class="taux-tag" style="${tierTagStyle(r.rec.taux)}">${r.rec.taux==null?"n/a":Math.round(r.rec.taux*100)+"%"}</span></td>
         <td>${apprLabel(r.rec.taux)}</td>
-        <td>${r.rec.approved ? '<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé</span>' : '<span class="taux-tag" style="background:#eee;color:#888;">En attente</span>'}</td>
+        <td>${r.rec.approved
+              ? '<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé</span>'
+              : (r.rec.closed
+                  ? '<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">Clôturée</span>'
+                  : '<span class="taux-tag" style="background:#eee;color:#888;">En cours</span>')}</td>
+        <td>${overallStaffingBadgeHTML(computeStaffingFromHeader({
+              agentsPoly:r.rec.agents_polyvalents, agentsCS:r.rec.agents_cs, livreurs:r.rec.nb_livreurs,
+              colisExpedies:r.rec.colis_expedies, colisLivresCS:r.rec.colis_livres_cs, colisLivresLivreurs:r.rec.colis_livres_livreurs
+            }))}</td>
       `;
     } else {
       tr.innerHTML = `
         <td class="rank-badge">–</td>
         <td><b>${r.name}</b></td>
-        <td colspan="5" class="agence-empty">Aucune visite enregistrée</td>
+        <td colspan="6" class="agence-empty">Aucune visite enregistrée</td>
       `;
     }
     tbody.appendChild(tr);
@@ -1068,11 +1186,10 @@ async function buildDashboard(){
 }
 
 async function openHistory(agenceName, anchorRow){
-  // repli : si une autre ligne d'historique est déjà ouverte, on la retire
   const existingExpand = document.querySelector("tr.history-expand");
   const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow;
   if(existingExpand) existingExpand.remove();
-  if(wasOpenForThisRow) return; // clic sur la même ligne : on referme, c'est tout
+  if(wasOpenForThisRow) return;
 
   let all = [];
   try{ all = await getAllVisites(); }catch(e){ showToast("Impossible de charger l'historique.", 4000); return; }
@@ -1086,6 +1203,12 @@ async function openHistory(agenceName, anchorRow){
   td.colSpan = nCols;
   expandRow.appendChild(td);
 
+  const refresh = async ()=>{
+    await buildDashboard();
+    const newRow = [...document.querySelectorAll("#dashBody tr.clickable")].find(x=>x.textContent.includes(agenceName));
+    if(newRow) openHistory(agenceName, newRow);
+  };
+
   if(recs.length===0){
     td.innerHTML = `<p style="color:var(--muted);font-size:12.5px;font-style:italic;margin:0;">Plus aucune visite enregistrée pour cette agence.</p>`;
   }
@@ -1095,29 +1218,57 @@ async function openHistory(agenceName, anchorRow){
     row.style.flexDirection = "column";
     row.style.alignItems = "stretch";
     row.style.gap = "4px";
-    const actions = currentRole === "manager"
-      ? `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`
-        + (r.approved ? "" : `<button class="load-btn" data-approve="${r.id}" style="color:#1c6b2e;">✓ Approuver</button>`)
-      : r.approved
-        ? `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`
-        : `<button class="load-btn" data-id="${r.id}">Ouvrir dans Visite →</button>
-           <button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
-    const statusBadge = r.approved
-      ? `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé par ${r.approved_by||"manager"}</span>`
-      : `<span class="taux-tag" style="background:#eee;color:#888;">En attente d'approbation</span>`;
+
+    // ---- actions selon rôle et statut (en cours / clôturée / approuvée) ----
+    let actions;
+    if(currentRole === "manager"){
+      actions = `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`;
+      if(r.approved){
+        actions += `<button class="load-btn" data-revoke="${r.id}" style="color:#8a5a00;">↩ Annuler l'approbation</button>`;
+        actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+      } else if(r.closed){
+        actions += `<button class="load-btn" data-approve="${r.id}" style="color:#1c6b2e;">✓ Approuver</button>`;
+        actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+      } else {
+        actions += `<span style="font-size:11px;color:var(--muted);font-style:italic;">En attente de clôture par le RPO</span>`;
+      }
+    } else {
+      if(r.approved){
+        actions = `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`;
+      } else {
+        actions = `<button class="load-btn" data-id="${r.id}">Ouvrir dans Visite →</button>`;
+        if(r.closed) actions += `<button class="load-btn" data-reopen="${r.id}" style="color:#8a5a00;">Rouvrir</button>`;
+        actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+      }
+    }
+
+    // ---- badge de statut ----
+    let statusBadge;
+    if(r.approved) statusBadge = `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé par ${r.approved_by||"manager"}</span>`;
+    else if(r.closed) statusBadge = `<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">Clôturée · en attente d'approbation</span>`;
+    else statusBadge = `<span class="taux-tag" style="background:#eee;color:#888;">En cours de saisie</span>`;
+
+    const staffing = computeStaffingFromHeader({
+      agentsPoly: r.agents_polyvalents, agentsCS: r.agents_cs, livreurs: r.nb_livreurs,
+      colisExpedies: r.colis_expedies, colisLivresCS: r.colis_livres_cs, colisLivresLivreurs: r.colis_livres_livreurs
+    });
+    const staffingHTML = staffingBadgesHTML(staffing, false);
+
     row.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <span>${r.date||"-"} — <span class="taux-tag" style="${tierTagStyle(r.taux)}">${r.taux==null?"n/a":Math.round(r.taux*100)+"%"}</span> ${statusBadge}</span>
-        <span style="display:flex;gap:14px;">${actions}</span>
+        <span style="display:flex;gap:14px;align-items:center;">${actions}</span>
       </div>
       <div style="font-size:11px;color:var(--muted);">
         Réf. : <b>${computeReference(r.date, r.id)}</b>
         &nbsp;·&nbsp; RPO : <b>${r.rpo_nom||r.rpo_email||"—"}</b>
-        &nbsp;·&nbsp; Employés : <b>${r.nb_employes||"—"}</b>
+        &nbsp;·&nbsp; Employés : <b>${r.nb_employes||"—"}</b> (CS : ${r.agents_cs||"—"}, Polyvalents : ${r.agents_polyvalents||"—"})
         &nbsp;·&nbsp; Livreurs : <b>${r.nb_livreurs||"—"}</b>
         &nbsp;·&nbsp; Agents sécurité : <b>${r.nb_agents_securite||"—"}</b>
       </div>
+      ${staffingHTML ? `<div style="margin-top:2px;">${staffingHTML}</div>` : ""}
     `;
+
     const loadBtn = row.querySelector("[data-id]");
     if(loadBtn){
       loadBtn.addEventListener("click", async ()=>{
@@ -1137,10 +1288,8 @@ async function openHistory(agenceName, anchorRow){
           await deleteRecordById(r.id);
           if(currentRecordId === r.id) currentRecordId = null;
           showToast("Visite supprimée.");
-          await buildDashboard();
-          const newRow = [...document.querySelectorAll("#dashBody tr.clickable")].find(x=>x.textContent.includes(agenceName));
-          if(newRow) openHistory(agenceName, newRow);
-        }catch(e){ showToast("Suppression impossible — cette visite a peut-être déjà été approuvée.", 5000); }
+          await refresh();
+        }catch(e){ showToast("Suppression impossible — réessaie.", 5000); }
       });
     }
     const approveBtn = row.querySelector("[data-approve]");
@@ -1151,10 +1300,30 @@ async function openHistory(agenceName, anchorRow){
         try{
           await approveRecordById(r.id);
           showToast("Visite approuvée.");
-          await buildDashboard();
-          const newRow = [...document.querySelectorAll("#dashBody tr.clickable")].find(x=>x.textContent.includes(agenceName));
-          if(newRow) openHistory(agenceName, newRow);
+          await refresh();
         }catch(e){ showToast("Approbation impossible — réessaie.", 4000); }
+      });
+    }
+    const revokeBtn = row.querySelector("[data-revoke]");
+    if(revokeBtn){
+      revokeBtn.addEventListener("click", async ()=>{
+        const ok = await askConfirm(`Annuler l'approbation de la visite du ${r.date||"-"} pour ${agenceName} ? Le RPO pourra à nouveau la modifier ou la supprimer.`);
+        if(!ok) return;
+        try{
+          await revokeApprovalById(r.id);
+          showToast("Approbation annulée.");
+          await refresh();
+        }catch(e){ showToast("Annulation impossible — réessaie.", 4000); }
+      });
+    }
+    const reopenBtn = row.querySelector("[data-reopen]");
+    if(reopenBtn){
+      reopenBtn.addEventListener("click", async ()=>{
+        try{
+          await reopenRecordById(r.id);
+          showToast("Visite rouverte.");
+          await refresh();
+        }catch(e){ showToast("Réouverture impossible — réessaie.", 4000); }
       });
     }
     const viewBtn = row.querySelector("[data-view]");
@@ -1218,6 +1387,11 @@ async function importAllData(file){
           nb_employes: rec.nb_employes || null,
           nb_livreurs: rec.nb_livreurs || null,
           nb_agents_securite: rec.nb_agents_securite || null,
+          agents_cs: rec.agents_cs || null,
+          agents_polyvalents: rec.agents_polyvalents || null,
+          colis_expedies: rec.colis_expedies || null,
+          colis_livres_cs: rec.colis_livres_cs || null,
+          colis_livres_livreurs: rec.colis_livres_livreurs || null,
           statuts: rec.statuts || (backup.records && backup.records[rec.id] && backup.records[rec.id].status) || {},
           anomalies: rec.anomalies || (backup.records && backup.records[rec.id] && backup.records[rec.id].anom) || {},
           taux: rec.taux ?? null,
@@ -1240,12 +1414,22 @@ async function importAllData(file){
 // INIT
 // ======================================================================
 function bindHeader(){
-  const map = {fAgence:"agence", fDate:"date", fSuperficie:"superficie", fEmployes:"employes", fLivreurs:"livreurs", fSecurite:"securite"};
+  const map = {fAgence:"agence", fDate:"date", fSuperficie:"superficie", fEmployes:"employes", fLivreurs:"livreurs", fSecurite:"securite",
+    fAgentsCS:"agentsCS", fAgentsPoly:"agentsPoly", fColisExpedies:"colisExpedies", fColisLivresCS:"colisLivresCS", fColisLivresLivreurs:"colisLivresLivreurs"};
   Object.entries(map).forEach(([elId,key])=>{
     const el = document.getElementById(elId);
     el.value = state.header[key] || "";
-    el.addEventListener("input", ()=>{ state.header[key]=el.value; scheduleSave(); });
+    el.addEventListener("input", ()=>{ state.header[key]=el.value; scheduleSave(); refreshStaffingLive(); });
   });
+  refreshStaffingLive();
+}
+
+function refreshStaffingLive(){
+  const el = document.getElementById("staffingLive");
+  if(!el) return;
+  const staffing = computeStaffingFromHeader(state.header);
+  const badges = staffingBadgesHTML(staffing, false);
+  el.innerHTML = badges || `<span style="color:var(--muted);font-size:12px;">Renseigne les effectifs et volumes de colis ci-dessus pour voir le diagnostic effectif.</span>`;
 }
 
 function fillAgenceList(){
@@ -1263,12 +1447,26 @@ document.getElementById("btnExpandAll").addEventListener("click", ()=>{
 document.getElementById("btnNew").addEventListener("click", async ()=>{
   const ok = await askConfirm("Démarrer une nouvelle visite ? La saisie actuellement à l'écran sera remplacée (elle reste enregistrée sous l'agence/date précédentes si elles étaient renseignées).");
   if(!ok) return;
-  state = { header:{agence:"",date:"",superficie:"",employes:"",livreurs:"",securite:""}, status:{}, anom:{} };
+  state = { header:{agence:"",date:"",superficie:"",employes:"",livreurs:"",securite:"",
+    agentsCS:"",agentsPoly:"",colisExpedies:"",colisLivresCS:"",colisLivresLivreurs:""}, status:{}, anom:{} };
   currentRecordId = null;
   bindHeader();
   buildSections();
   recompute();
   showToast("Nouvelle visite démarrée.");
+});
+
+document.getElementById("btnClose").addEventListener("click", async ()=>{
+  if(!currentRecordId){
+    showToast("Renseigne au moins l'agence et la date, et attends que la visite soit enregistrée, avant de la clôturer.", 5000);
+    return;
+  }
+  const ok = await askConfirm("Clôturer cette visite ? Le manager pourra alors l'approuver. Tu pourras encore la rouvrir si besoin (tant qu'elle n'est pas approuvée).");
+  if(!ok) return;
+  try{
+    await closeRecordById(currentRecordId);
+    showToast("Visite clôturée — elle est maintenant visible pour approbation par le manager.");
+  }catch(e){ showToast("Clôture impossible — réessaie.", 4000); }
 });
 
 document.getElementById("btnPrint").addEventListener("click", ()=>{
