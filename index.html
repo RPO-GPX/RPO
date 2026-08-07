@@ -348,7 +348,7 @@
   <div class="header-card" style="margin-top:12px;">
     <div class="field"><label>Colis expédiés (total)</label><input id="fColisExpedies" type="number" min="0" placeholder="ex. 320"></div>
     <div class="field"><label>Colis livrés par CS (agence)</label><input id="fColisLivresCS" type="number" min="0" placeholder="ex. 240"></div>
-    <div class="field"><label>Colis livrés par livreurs (domicile)</label><input id="fColisLivresLivreurs" type="number" min="0" placeholder="ex. 110"></div>
+    <div class="field"><label>Colis sortis par livreur (domicile)</label><input id="fColisLivresLivreurs" type="number" min="0" placeholder="ex. 110"></div>
   </div>
   <div style="max-width:1040px;margin:10px auto 0;padding:0 22px;" id="staffingLive"></div>
 
@@ -408,6 +408,11 @@
   <div class="pv-row"><b>Agents de sécurité :</b><span id="pvSecurite">-</span></div>
   <div class="pv-row"><b>Agents CS / Polyvalents :</b><span id="pvAgentsCSPoly">-</span></div>
   <div class="pv-sub">Diagnostic effectif (charge de travail / colis)</div>
+  <div class="pv-detail" style="grid-template-columns:repeat(3,1fr);margin-top:6px;">
+    <div><span>Colis expédiés (total)</span><b id="pvColisExpedies">-</b></div>
+    <div><span>Colis livrés par CS</span><b id="pvColisLivresCS">-</b></div>
+    <div><span>Colis sortis par livreur</span><b id="pvColisLivresLivreurs">-</b></div>
+  </div>
   <div id="pvStaffing" style="padding:8px 2px;font-size:12px;"></div>
   <div class="pv-taux"><b style="font-size:14px;">TAUX DE CONFORMITÉ GLOBAL (pondéré)</b><span class="val" id="pvTaux">–</span></div>
   <div class="pv-appr" id="pvAppr">–</div>
@@ -442,7 +447,7 @@
 // DONNÉES : sections, poids de criticité, items
 // ======================================================================
 const SECTIONS = [
-{ key:"administration", name:"Administration", weight:15, items:[
+{ key:"administration", name:"Administration", weight:25, items:[
   ["01","Registre de commerce SPA original (avec les articles correspondant à l'activité réelle)"],
   ["02","Déclaration d'existence disponible"],
   ["03","Certificat d'existence C20 SPA – Année 2026"],
@@ -456,8 +461,10 @@ const SECTIONS = [
   ["11","05 Livres légaux SPA légalisés et disponible (numérique)"],
   ["12","Autorisation ARPCE / cahier des charges"],
   ["13","Registre des doléances disponible et accessible"],
+  ["14","Remise des clés de l'agence avec décharge"],
+  ["15","Compteur électricité et abonnement internet (modem) au nom de GUEPEX SPA"],
 ]},
-{ key:"rh", name:"RH", weight:10, items:[
+{ key:"rh", name:"RH", weight:25, items:[
   ["01","Livres légaux à jours"],
   ["02","Contrats de travail signés pour chaque employé (numérique)"],
   ["03","Procès-verbal (PV) d'installation du personnel disponible"],
@@ -485,22 +492,20 @@ const SECTIONS = [
   ["10","Étalonnage des balances"],
   ["11","NIF affiché"],
   ["12","Affichage du site web et du numéro du call center pour les clients particuliers"],
-  ["13","Politique QHSE"],
-  ["14","Tableau d'affichage aux employés"],
-  ["15","Règlement intérieur"],
-  ["16","Convention collective"],
-  ["17","Résultats du dernier audit interne"],
-  ["18","Planning des pauses et permanences"],
-  ["19","Organigramme de l'agence affiché"],
-  ["20","Inventaire Matériel"],
-  ["21","Affichage HSE"],
+  ["13","Tableau d'affichage aux employés"],
+  ["14","Règlement intérieur, avec accusé de lecture"],
+  ["15","Convention collective, avec accusé de lecture"],
+  ["16","Planning des pauses et permanences"],
+  ["17","Organigramme de l'agence affiché"],
+  ["18","Inventaire Matériel"],
+  ["19","Affichage HSE"],
 ]},
-{ key:"si", name:"Service SI", weight:10, items:[
+{ key:"si", name:"Service SI", weight:5, items:[
   ["01","Compte RH disponible et fonctionnel"],
   ["02","Compte Cash Box disponible et fonctionnel"],
   ["03","Compte réclamation disponible et fonctionnel"],
   ["04","Comptes utilisateurs créés pour chaque employé concerné"],
-  ["05","Adresse email professionnelle fournie à chaque employé concerné"],
+  ["05","Adresse email professionnelle fournie à chaque employé concerné, avec signature"],
   ["06","File d'attente à jour et fonctionnelle"],
   ["07","Application Wave disponible et fonctionnelle sur téléphone du chef agence"],
   ["08","NextCloud disponible chez tout les services de l'agence"],
@@ -520,18 +525,16 @@ const SECTIONS = [
   ["06","Espace client distinct et séparé de la zone des opérations internes"],
   ["07","Rideaux de séparation en bon état et propres"],
 ]},
-{ key:"commercial", name:"Commercial et Marketing", weight:10, items:[
+{ key:"commercial", name:"Commercial et Marketing", weight:5, items:[
   ["01","Cartes de visite disponibles et à jour au niveau de l'agence"],
-  ["02","Flyers des services présents dans l'agence"],
-  ["03","Présence d'un commercial dans l'agence"],
-  ["04","Existence d'une procédure d'ouverture de compte client claire et appliquée"],
-  ["05","Les ouvertures de comptes clients se font-elles sur la base d'un échantillon"],
-  ["06","Tous les clients actifs disposent d'une carte client"],
-  ["07","Les contrats clients sont signés conformément aux normes légales et commerciales"],
-  ["08","Archivage électronique et physique des conventions/contrats clients assuré"],
-  ["09","Mot de passe ou données sensibles clients non accessibles dans les fichiers partagés"],
-  ["10","Chef d'agence vérifie les documents avant envoi (RC, NIF, NIS, carte identité, etc.)"],
-  ["11","Liste des top clients et offre préférentielle"],
+  ["02","Présence d'un commercial dans l'agence"],
+  ["03","Existence d'une procédure d'ouverture de compte client claire et appliquée"],
+  ["04","Tous les clients actifs disposent d'une carte client"],
+  ["05","Les contrats clients sont signés conformément aux normes légales et commerciales"],
+  ["06","Archivage électronique et physique des conventions/contrats clients assuré"],
+  ["07","Mot de passe ou données sensibles clients non accessibles dans les fichiers partagés"],
+  ["08","Chef d'agence vérifie les documents avant envoi (RC, NIF, NIS, carte identité, etc.)"],
+  ["09","Liste des top clients et offre préférentielle"],
 ]},
 { key:"serviceclients", name:"Service clients", weight:15, items:[
   ["__sub__","Stop Desk"],
@@ -562,7 +565,7 @@ const SECTIONS = [
   ["23","Le CS assure le suivi de chaque réclamation jusqu'à sa clôture"],
   ["24","Le CS communique les retours d'information (feedback) aux clients"],
 ]},
-{ key:"operations", name:"Opérations", weight:10, items:[
+{ key:"operations", name:"Opérations", weight:5, items:[
   ["01","Navette réceptionnée selon les normes et procédures internes"],
   ["02","Sortie des coursiers conforme aux procédures internes (récolte d'argent, soldement avant remise des colis)"],
   ["03","Répartition des colis équilibrée et dans les limites prévues par agent"],
@@ -574,7 +577,7 @@ const SECTIONS = [
   ["09","Rapport audit clean (colis et récoltes en souffrance conforme)"],
   ["10","Dispatch par trajet respecté"],
 ]},
-{ key:"finance", name:"Finance", weight:20, items:[
+{ key:"finance", name:"Finance", weight:10, items:[
   ["01","L'inventaire de la caisse se fait quotidiennement"],
   ["02","La remise des paiements se fait conformément aux procédures"],
   ["03","Un caissier est disponible au niveau de l'agence"],
@@ -899,7 +902,7 @@ function sectionStats(sec){
     else if(v==="nonconforme") nonconforme++;
     else if(v==="na") na++;
   });
-  const denom = conforme+nonconforme;
+  const denom = conforme + (2*nonconforme); // un item non conforme compte double dans le calcul
   const taux = denom>0 ? conforme/denom : null;
   return {conforme,nonconforme,na,taux};
 }
@@ -975,7 +978,7 @@ function computeGlobals(){
     rows.push({name:sec.name, key:sec.key, taux:s.taux});
   });
   const weighted = sumW>0 ? sumWT/sumW : null;
-  const simple = (gConf+gNonConf)>0 ? gConf/(gConf+gNonConf) : null;
+  const simple = (gConf+(2*gNonConf))>0 ? gConf/(gConf+(2*gNonConf)) : null;
   let appreciation = "n/a";
   if(weighted!==null){
     appreciation = weighted>=0.8 ? "CONFORME" : (weighted>=0.51 ? "À AMÉLIORER" : "NON CONFORME");
@@ -1038,7 +1041,7 @@ function computeReference(dateStr, id){
     dateFmt = day + m + y.slice(2); // JJMMAA
   }
   const suffix = id ? id.replace(/-/g,"").slice(0,6).toUpperCase() : "PROV";
-  return "GPX-" + dateFmt + "-" + suffix;
+  return "DOP-" + dateFmt + "-" + suffix;
 }
 function generateReference(){
   return computeReference(state.header.date, currentRecordId);
@@ -1055,6 +1058,9 @@ function buildPrintView(){
   document.getElementById("pvSecurite").textContent = state.header.securite || "-";
   document.getElementById("pvAgentsCSPoly").textContent =
     (state.header.agentsCS || "-") + " / " + (state.header.agentsPoly || "-");
+  document.getElementById("pvColisExpedies").textContent = state.header.colisExpedies || "-";
+  document.getElementById("pvColisLivresCS").textContent = state.header.colisLivresCS || "-";
+  document.getElementById("pvColisLivresLivreurs").textContent = state.header.colisLivresLivreurs || "-";
   const staffing = computeStaffingFromHeader(state.header);
   const staffingHTML = staffingBadgesHTML(staffing, false);
   document.getElementById("pvStaffing").innerHTML = staffingHTML
@@ -1500,6 +1506,7 @@ function applyRoleUI(){
     document.getElementById("btnNew").style.display = "none";
     document.getElementById("btnExpandAll").style.display = "none";
     document.getElementById("btnPrint").style.display = "none";
+    document.getElementById("btnClose").style.display = "none";
     if(importLabel) importLabel.style.display = "none";
     switchView("dashboard");
   } else {
