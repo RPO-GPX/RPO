@@ -162,12 +162,12 @@
   .view.active{ display:block; }
 
   /* ---------- dashboard ---------- */
-  .dash-wrap{ max-width:1100px; margin:20px auto 90px; padding:0 18px; }
+  .dash-wrap{ max-width:1200px; margin:20px auto 90px; padding:0 18px; }
   .dash-toolbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px; flex-wrap:wrap;}
   .dash-toolbar .status{ font-size:12.5px; color:var(--muted); }
   table.dash{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:13px; }
-  table.dash th{ background:var(--navy); color:#fff; text-align:left; padding:10px 12px; font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; }
-  table.dash td{ padding:9px 12px; border-top:1px solid var(--line); }
+  table.dash th{ background:var(--navy); color:#fff; text-align:left; padding:10px 12px; font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+  table.dash td{ padding:9px 12px; border-top:1px solid var(--line); white-space:nowrap; }
   table.dash tr.clickable{ cursor:pointer; }
   table.dash tr.clickable:hover{ background:#faf9f7; }
   .rank-badge{ font-weight:800; color:var(--muted); }
@@ -320,6 +320,7 @@
   <div class="sep"></div>
   <div class="taux-pill">Taux global <b id="tbGlobal">–</b></div>
   <div class="appr-badge appr-na" id="tbAppr">–</div>
+  <div class="taux-pill" id="pillTotalEmployes" style="display:none;">Personnel total <b id="tbTotalEmployes">–</b></div>
   <div class="spacer"></div>
   <div class="role-pill" id="rolePill" style="display:none;"><span class="dot"></span><span id="roleLabel"></span></div>
   <span class="taux-pill" id="saveStatus" style="font-size:11.5px;">Enregistré</span>
@@ -363,7 +364,7 @@
 <div class="view" id="viewDashboard">
   <div class="dash-wrap">
     <div class="dash-toolbar">
-      <h2 style="margin:0;font-size:18px;">Comparatif de conformité — Toutes agences</h2>
+      <h2 style="margin:0;font-size:18px;" id="dashTitle">Comparatif de conformité — Toutes agences</h2>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status" id="dashStatus">Chargement…</span>
         <button class="btn" id="btnExport" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">Exporter (sauvegarde)</button>
@@ -373,9 +374,13 @@
         </label>
       </div>
     </div>
-    <table class="dash">
+    <table class="dash" id="dashRankingTable">
       <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th><th>Effectif</th></tr></thead>
       <tbody id="dashBody"></tbody>
+    </table>
+    <table class="dash" id="dashAnomaliesTable" style="display:none;">
+      <thead><tr><th>Agence</th><th>Dernière visite</th><th>Points non conformes</th></tr></thead>
+      <tbody id="dashAnomaliesBody"></tbody>
     </table>
   </div>
 </div>
@@ -643,11 +648,28 @@ const SUPABASE_KEY = "sb_publishable_pALTpJJum0l9zt-Z1xYfqw_Nk8VYAgO";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
-let currentRole = null; // 'inspecteur' | 'manager'
+let currentRole = null; // 'inspecteur' | 'manager' | 'directeur_regional'
 let currentUserName = null;
+let currentUserRegion = null; // région du Directeur régional ('Est'|'Ouest'|'Centre'|'Sud'), sinon null
 let realtimeChannel = null;
 // ======================================================================
 const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
+
+// ======================================================================
+// RÉGIONS (pour le rôle Directeur régional)
+// Remarque : "Agence de Oued Zenati" n'était présente dans aucune des 4 listes
+// fournies — rattachée par défaut à la région Est (cohérent avec le macro-
+// découpage Centre/Est/Ouest/Sud déjà utilisé ailleurs). À ajuster si besoin.
+// ======================================================================
+const REGIONS = {
+  "Est": ["Agence BBA Nouveau Lycée", "Agence Ras El Oued", "Agence Centre ville", "Agence de Aïn Oulmene", "Agence de Bougaa", "Agence El Hidhab", "Agence de El Bouni", "Agence de Sidi Brahim", "Agence de Barika", "Agence du CHU Route de Tazoult", "Agence Merouana", "Agence d'El Khroub", "Agence Nouvelle Ville", "Agence Sidi Mabrouk", "Agence de El Milia", "Agence de Taher", "Agence de Berhoum", "Agence Sidi Aïssa", "Agence Ferdjioua", "Agence de Azzaba", "Agence de Collo", "Agence de El Harrouch", "Agence de Skikda Faubourg", "Agence Cheria (Tébessa)", "Agence de Oued Zenati"],
+  "Ouest": ["Agence de Aïn Defla", "Agence de Khemis Miliana", "Agence de Chlef", "Agence de Ténès", "Agence BOUKADIR", "Agence de Beni Saf", "Kharouba", "Agence de Mecheria", "Agence de Arzew", "Cité Djamel", "Agence MARAVAL", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tlemcen (Bel-Air)"],
+  "Centre": ["Agence de Aïn Benian", "Agence de Bab El Oued", "Sacré-Cœur", "Agence de Zeralda", "Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Ouled Fayet", "Agence de Baraki", "Agence de Birtouta", "Agence de Béjaïa (Cité Tobal)", "Agence de El Kseur", "Agence de Bab Dzair", "Agence de Boufarik", "Agence Mouzaia Blida", "Agence de Sour El Ghouzlane", "Agence Boudouaou", "Agence de Bordj Menaiel", "Agence de Médéa (Pole Urbain)", "Agence Berrouaghia", "Agence Cherchell", "Agence Koléa", "Agence de Bekkar", "Agence de Draâ Ben Khedda", "Agence de Tizi Gheniff", "Agence Ain Bessem"],
+  "Sud": ["Agence de Tolga", "Agence de Djanet", "Agence de Djamaa", "Agence de Ghardaïa Thenia", "Agence de Illizi", "Agence In Amenas", "Agence de Ouargla Centre Ville", "Agence de Tamanrasset (Gataâ El Oued)"]
+};
+function agencesForRegion(region){
+  return REGIONS[region] || [];
+}
 
 // ======================================================================
 // ÉTAT
@@ -670,7 +692,7 @@ let lastSaveOk = null;
 
 let saveTimer = null;
 function scheduleSave(){
-  if(currentRole === "manager") return; // lecture seule, jamais d'écriture
+  if(currentRole === "manager" || currentRole === "directeur_regional") return; // lecture seule, jamais d'écriture
   setSaveStatus("Enregistrement…");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>persistNow(0), 900);
@@ -1120,6 +1142,19 @@ function apprLabel(taux){
 }
 
 async function buildDashboard(){
+  // Le Directeur régional a une vue dédiée : uniquement les points non conformes de sa région
+  if(currentRole === "directeur_regional"){
+    document.getElementById("dashRankingTable").style.display = "none";
+    document.getElementById("dashAnomaliesTable").style.display = "";
+    document.getElementById("dashTitle").textContent = "Points non conformes — Région " + (currentUserRegion || "?");
+    document.getElementById("pillTotalEmployes").style.display = "none";
+    await buildRegionAnomalies();
+    return;
+  }
+  document.getElementById("dashRankingTable").style.display = "";
+  document.getElementById("dashAnomaliesTable").style.display = "none";
+  document.getElementById("dashTitle").textContent = "Comparatif de conformité — Toutes agences";
+
   const statusEl = document.getElementById("dashStatus");
   statusEl.textContent = "Chargement…";
   let all = [];
@@ -1154,11 +1189,17 @@ async function buildDashboard(){
 
   const tbody = document.getElementById("dashBody");
   tbody.innerHTML = "";
+  const showEmployesCol = (currentRole === "manager");
   let rank = 0;
+  let totalEmployes = 0;
+  let agencesAvecEffectif = 0;
   rows.forEach(r=>{
     rank++;
     const tr = document.createElement("tr");
     if(r.rec){
+      const nbEmployes = parseInt(r.rec.nb_employes, 10);
+      const nbEmployesValid = !isNaN(nbEmployes);
+      if(nbEmployesValid){ totalEmployes += nbEmployes; agencesAvecEffectif++; }
       tr.className = "clickable";
       tr.addEventListener("click", ()=> openHistory(r.name, tr));
       tr.innerHTML = `
@@ -1188,9 +1229,135 @@ async function buildDashboard(){
     tbody.appendChild(tr);
   });
 
+  const pillTotal = document.getElementById("pillTotalEmployes");
+  if(showEmployesCol){
+    pillTotal.style.display = "flex";
+    document.getElementById("tbTotalEmployes").textContent = totalEmployes + " (" + agencesAvecEffectif + "/" + rows.length + " agences)";
+  } else {
+    pillTotal.style.display = "none";
+  }
+
   statusEl.textContent = all.length+" visite"+(all.length>1?"s":"")+" enregistrée"+(all.length>1?"s":"")+" au total"
     + (currentRole==="manager" ? " (toutes agences, temps réel)" : "");
 }
+
+// ======================================================================
+// VUE DIRECTEUR RÉGIONAL — Points non conformes de sa région uniquement
+// ======================================================================
+const ITEM_INFO = {};
+SECTIONS.forEach(sec=>{
+  sec.items.forEach(([n, label])=>{
+    ITEM_INFO[itemId(sec.key, n)] = { section: sec.name, label };
+  });
+});
+
+async function buildRegionAnomalies(){
+  const statusEl = document.getElementById("dashStatus");
+  const tbody = document.getElementById("dashAnomaliesBody");
+  statusEl.textContent = "Chargement…";
+  let all = [];
+  try{
+    all = await getAllVisites();
+  }catch(e){
+    console.warn("Chargement impossible :", e);
+    statusEl.textContent = "Impossible de charger les données — vérifie ta connexion internet.";
+    tbody.innerHTML = "";
+    return;
+  }
+
+  const scopedAgences = agencesForRegion(currentUserRegion);
+
+  // seules les visites approuvées par le Manager sont visibles au DR
+  const approvedOnly = all.filter(rec=> rec.approved === true);
+
+  // dernière visite APPROUVÉE par agence (parmi les agences de la région)
+  const byAgence = {};
+  approvedOnly.forEach(rec=>{
+    const key = (rec.agence||"").trim().toLowerCase();
+    if(!key) return;
+    if(!byAgence[key] || new Date(rec.date) > new Date(byAgence[key].date)){
+      byAgence[key] = rec;
+    }
+  });
+
+  // groupe par agence : liste des points non conformes de sa dernière visite
+  const agencyGroups = [];
+  let totalPoints = 0;
+  scopedAgences.forEach(name=>{
+    const rec = byAgence[name.trim().toLowerCase()];
+    if(!rec) return;
+    const statuts = rec.statuts || {};
+    const anomalies = rec.anomalies || {};
+    const points = [];
+    Object.keys(statuts).forEach(id=>{
+      if(statuts[id] !== "nonconforme") return;
+      const info = ITEM_INFO[id];
+      points.push({
+        section: info ? info.section : "-",
+        label: info ? info.label : id,
+        anomalie: anomalies[id] || ""
+      });
+    });
+    if(points.length === 0) return;
+    totalPoints += points.length;
+    agencyGroups.push({ agence: name, date: rec.date || "-", points });
+  });
+  agencyGroups.sort((a,b)=> b.points.length - a.points.length);
+
+  tbody.innerHTML = "";
+  if(agencyGroups.length === 0){
+    tbody.innerHTML = `<tr><td colspan="3" class="agence-empty">Aucun point non conforme relevé pour les agences de cette région (parmi les visites approuvées par le Manager).</td></tr>`;
+  } else {
+    agencyGroups.forEach(g=>{
+      const tr = document.createElement("tr");
+      tr.className = "clickable";
+      tr.innerHTML = `
+        <td><b>${g.agence}</b></td>
+        <td>${g.date}</td>
+        <td><span class="taux-tag" style="${tierTagStyle(0)}">${g.points.length} point${g.points.length>1?"s":""}</span></td>
+      `;
+      tr.addEventListener("click", ()=> openAgencyAnomalies(g, tr));
+      tbody.appendChild(tr);
+    });
+  }
+
+  statusEl.textContent = agencyGroups.length+" agence"+(agencyGroups.length>1?"s":"")+" concernée"+(agencyGroups.length>1?"s":"")
+    +" · "+totalPoints+" point"+(totalPoints>1?"s":"")+" non conforme"+(totalPoints>1?"s":"")
+    +" (région "+currentUserRegion+", visites approuvées, temps réel)";
+}
+
+function openAgencyAnomalies(group, anchorRow){
+  const existingExpand = document.querySelector("tr.anomalies-expand");
+  const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow;
+  if(existingExpand) existingExpand.remove();
+  if(wasOpenForThisRow) return;
+
+  const nCols = anchorRow.children.length;
+  const expandRow = document.createElement("tr");
+  expandRow.className = "anomalies-expand";
+  const td = document.createElement("td");
+  td.colSpan = nCols;
+
+  group.points.forEach(p=>{
+    const row = document.createElement("div");
+    row.className = "hist-row";
+    row.style.flexDirection = "column";
+    row.style.alignItems = "stretch";
+    row.style.gap = "2px";
+    row.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
+      <div style="font-size:12.5px;">${p.label}</div>
+      <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+    `;
+    td.appendChild(row);
+  });
+
+  expandRow.appendChild(td);
+  anchorRow.after(expandRow);
+  expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+
 
 async function openHistory(agenceName, anchorRow){
   const existingExpand = document.querySelector("tr.history-expand");
@@ -1228,7 +1395,7 @@ async function openHistory(agenceName, anchorRow){
 
     // ---- actions selon rôle et statut (en cours / clôturée / approuvée) ----
     let actions;
-    if(currentRole === "manager"){
+    if(currentRole === "manager" || currentRole === "directeur_regional"){
       actions = `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`;
       if(r.approved){
         actions += `<button class="load-btn" data-revoke="${r.id}" style="color:#8a5a00;">↩ Annuler l'approbation</button>`;
@@ -1498,11 +1665,18 @@ function applyRoleUI(){
   const label = document.getElementById("roleLabel");
   pill.style.display = "flex";
   const displayName = currentUserName || currentUser.email;
-  label.textContent = currentRole === "manager" ? displayName + " · Manager (lecture seule)" : displayName + " · RPO";
+  if(currentRole === "manager"){
+    label.textContent = displayName + " · Manager (lecture seule)";
+  } else if(currentRole === "directeur_regional"){
+    label.textContent = displayName + " · Directeur régional — Région " + (currentUserRegion || "?") + " (lecture seule)";
+  } else {
+    label.textContent = displayName + " · RPO";
+  }
 
   const importLabel = document.getElementById("fileImport")?.closest("label");
+  const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional");
 
-  if(currentRole === "manager"){
+  if(isReadOnlyRole){
     document.getElementById("tabInspection").style.display = "none";
     document.getElementById("btnNew").style.display = "none";
     document.getElementById("btnExpandAll").style.display = "none";
@@ -1528,7 +1702,7 @@ function setupRealtime(){
 async function afterLogin(user){
   currentUser = user;
   try{
-    let { data: profile, error } = await sb.from("profiles").select("role,full_name").eq("id", user.id).single();
+    let { data: profile, error } = await sb.from("profiles").select("role,full_name,region").eq("id", user.id).single();
 
     // auto-réparation : si le profil n'existe pas encore (compte créé avant la mise en place du trigger),
     // on le crée nous-mêmes au lieu de planter
@@ -1536,7 +1710,7 @@ async function afterLogin(user){
       console.warn("Profil introuvable, création automatique :", error);
       const { data: created, error: createErr } = await sb.from("profiles")
         .insert({ id: user.id, role: "inspecteur", full_name: null })
-        .select("role,full_name").single();
+        .select("role,full_name,region").single();
       if(createErr){
         throw new Error("Impossible de lire ou créer ton profil (rôle). Détail technique : " + createErr.message);
       }
@@ -1544,6 +1718,7 @@ async function afterLogin(user){
     }
 
     currentRole = profile.role || "inspecteur";
+    currentUserRegion = profile.region || null;
 
     // si le nom n'a jamais été renseigné (ou vaut encore l'email par défaut d'une ancienne version), on le demande une fois
     if(!profile.full_name || profile.full_name === user.email){
