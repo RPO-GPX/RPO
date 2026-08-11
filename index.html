@@ -385,7 +385,7 @@
   </div>
 </div>
 
-<footer class="credits">Checklist de conformité GUEPEX — outil interne, données enregistrées de façon persistante sur ton compte (synchronisées entre tes appareils).</footer>
+<footer class="credits">Checklist de conformité GUEPEX — outil interne, données enregistrées de façon persistante sur ton compte (synchronisées entre tes appareils).<br>Créé et développé par Mehdi M-A</footer>
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal-box">
@@ -1146,8 +1146,7 @@ async function buildDashboard(){
   if(currentRole === "directeur_regional"){
     document.getElementById("dashRankingTable").style.display = "none";
     document.getElementById("dashAnomaliesTable").style.display = "";
-    document.getElementById("dashTitle").textContent = "Points non conformes — Région " + (currentUserRegion || "?");
-    document.getElementById("pillTotalEmployes").style.display = "none";
+    document.getElementById("dashTitle").textContent = "Points non conformes (Administration / RH / Commercial et Marketing) — Région " + (currentUserRegion || "?");
     await buildRegionAnomalies();
     return;
   }
@@ -1247,9 +1246,12 @@ async function buildDashboard(){
 const ITEM_INFO = {};
 SECTIONS.forEach(sec=>{
   sec.items.forEach(([n, label])=>{
-    ITEM_INFO[itemId(sec.key, n)] = { section: sec.name, label };
+    ITEM_INFO[itemId(sec.key, n)] = { sectionKey: sec.key, section: sec.name, label };
   });
 });
+
+// Le Directeur régional ne voit les non-conformités que pour ces sections
+const DR_VISIBLE_SECTIONS = ["administration", "rh", "commercial"];
 
 async function buildRegionAnomalies(){
   const statusEl = document.getElementById("dashStatus");
@@ -1283,18 +1285,23 @@ async function buildRegionAnomalies(){
   // groupe par agence : liste des points non conformes de sa dernière visite
   const agencyGroups = [];
   let totalPoints = 0;
+  let totalEmployesRegion = 0;
+  let agencesAvecEffectifRegion = 0;
   scopedAgences.forEach(name=>{
     const rec = byAgence[name.trim().toLowerCase()];
     if(!rec) return;
+    const nbEmployes = parseInt(rec.nb_employes, 10);
+    if(!isNaN(nbEmployes)){ totalEmployesRegion += nbEmployes; agencesAvecEffectifRegion++; }
     const statuts = rec.statuts || {};
     const anomalies = rec.anomalies || {};
     const points = [];
     Object.keys(statuts).forEach(id=>{
       if(statuts[id] !== "nonconforme") return;
       const info = ITEM_INFO[id];
+      if(!info || !DR_VISIBLE_SECTIONS.includes(info.sectionKey)) return; // sections hors périmètre DR
       points.push({
-        section: info ? info.section : "-",
-        label: info ? info.label : id,
+        section: info.section,
+        label: info.label,
         anomalie: anomalies[id] || ""
       });
     });
@@ -1324,6 +1331,10 @@ async function buildRegionAnomalies(){
   statusEl.textContent = agencyGroups.length+" agence"+(agencyGroups.length>1?"s":"")+" concernée"+(agencyGroups.length>1?"s":"")
     +" · "+totalPoints+" point"+(totalPoints>1?"s":"")+" non conforme"+(totalPoints>1?"s":"")
     +" (région "+currentUserRegion+", visites approuvées, temps réel)";
+
+  const pillTotal = document.getElementById("pillTotalEmployes");
+  pillTotal.style.display = "flex";
+  document.getElementById("tbTotalEmployes").textContent = totalEmployesRegion + " (" + agencesAvecEffectifRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
 }
 
 function openAgencyAnomalies(group, anchorRow){
