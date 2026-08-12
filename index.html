@@ -375,11 +375,11 @@
       </div>
     </div>
     <table class="dash" id="dashRankingTable">
-      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th><th>Effectif</th></tr></thead>
+      <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th><th>Effectif</th><th>Correction</th></tr></thead>
       <tbody id="dashBody"></tbody>
     </table>
     <table class="dash" id="dashAnomaliesTable" style="display:none;">
-      <thead><tr><th>Agence</th><th>Dernière visite</th><th>Points non conformes</th></tr></thead>
+      <thead><tr><th>Agence</th><th>Dernière visite</th><th>Points non conformes</th><th>Correction</th></tr></thead>
       <tbody id="dashAnomaliesBody"></tbody>
     </table>
   </div>
@@ -692,7 +692,7 @@ let lastSaveOk = null;
 
 let saveTimer = null;
 function scheduleSave(){
-  if(currentRole === "manager" || currentRole === "directeur_regional") return; // lecture seule, jamais d'écriture
+  if(currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general") return; // lecture seule, jamais d'écriture
   setSaveStatus("Enregistrement…");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>persistNow(0), 900);
@@ -1141,6 +1141,42 @@ function apprLabel(taux){
   return "Non conforme";
 }
 
+// Regroupe les visites par agence, triées de la plus récente à la plus ancienne.
+// Permet de retrouver la visite "précédente" pour détecter une correction laissée en cours.
+function groupVisitesByAgence(list){
+  const byAgence = {};
+  list.forEach(rec=>{
+    const key = (rec.agence||"").trim().toLowerCase();
+    if(!key) return;
+    if(!byAgence[key]) byAgence[key] = [];
+    byAgence[key].push(rec);
+  });
+  Object.values(byAgence).forEach(arr=> arr.sort((a,b)=> new Date(b.date) - new Date(a.date)));
+  return byAgence;
+}
+
+// Avertissement : la visite précédente (approuvée) de cette agence était en cours de correction
+// et une nouvelle visite l'a remplacée comme "dernière visite" avant d'être finalisée.
+function correctionCarryoverWarningHTML(sortedApprovedForAgence, latestId){
+  if(!sortedApprovedForAgence || sortedApprovedForAgence.length < 2) return "";
+  const previous = sortedApprovedForAgence[1];
+  if(sortedApprovedForAgence[0].id !== latestId) return ""; // sécurité
+  if(previous.correction_status !== "in_progress") return "";
+  return `<div class="taux-tag" style="background:#fde2e2;color:#a11313;margin-top:4px;font-size:10.5px;font-weight:700;">⚠ Correction précédente (${previous.date}) non finalisée</div>`;
+}
+
+function correctionCellHTML(rec){
+  if(rec.correction_status === "done"){
+    return `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Terminée</span>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${rec.correction_done_by || "—"}</div>`;
+  }
+  if(rec.correction_status === "in_progress"){
+    return `<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">En cours</span>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${rec.correction_started_by || "—"}</div>`;
+  }
+  return `<span class="taux-tag" style="background:#eee;color:#888;">Non démarrée</span>`;
+}
+
 async function buildDashboard(){
   // Le Directeur régional a une vue dédiée : uniquement les points non conformes de sa région
   if(currentRole === "directeur_regional"){
@@ -1168,14 +1204,9 @@ async function buildDashboard(){
   }
 
   // dernière visite par agence
+  const byAgenceSorted = groupVisitesByAgence(all);
   const byAgence = {};
-  all.forEach(rec=>{
-    const key = (rec.agence||"").trim().toLowerCase();
-    if(!key) return;
-    if(!byAgence[key] || new Date(rec.date) > new Date(byAgence[key].date)){
-      byAgence[key] = rec;
-    }
-  });
+  Object.keys(byAgenceSorted).forEach(key=>{ byAgence[key] = byAgenceSorted[key][0]; });
 
   const rows = AGENCES.map(name=>{
     const rec = byAgence[name.trim().toLowerCase()];
@@ -1188,7 +1219,7 @@ async function buildDashboard(){
 
   const tbody = document.getElementById("dashBody");
   tbody.innerHTML = "";
-  const showEmployesCol = (currentRole === "manager");
+  const showEmployesCol = (currentRole === "manager" || currentRole === "directeur_general");
   let rank = 0;
   let totalEmployes = 0;
   let agencesAvecEffectif = 0;
@@ -1217,12 +1248,13 @@ async function buildDashboard(){
               agentsPoly:r.rec.agents_polyvalents, agentsCS:r.rec.agents_cs, livreurs:r.rec.nb_livreurs,
               colisExpedies:r.rec.colis_expedies, colisLivresCS:r.rec.colis_livres_cs, colisLivresLivreurs:r.rec.colis_livres_livreurs
             }))}</td>
+        <td>${correctionCellHTML(r.rec)}${correctionCarryoverWarningHTML(byAgenceSorted[r.name.trim().toLowerCase()], r.rec.id)}</td>
       `;
     } else {
       tr.innerHTML = `
         <td class="rank-badge">–</td>
         <td><b>${r.name}</b></td>
-        <td colspan="6" class="agence-empty">Aucune visite enregistrée</td>
+        <td colspan="7" class="agence-empty">Aucune visite enregistrée</td>
       `;
     }
     tbody.appendChild(tr);
@@ -1253,6 +1285,20 @@ SECTIONS.forEach(sec=>{
 // Le Directeur régional ne voit les non-conformités que pour ces sections
 const DR_VISIBLE_SECTIONS = ["administration", "rh", "commercial"];
 
+// Points non conformes d'une visite, restreints aux sections visibles par le DR
+function drVisiblePoints(rec){
+  const statuts = rec.statuts || {};
+  const anomalies = rec.anomalies || {};
+  const points = [];
+  Object.keys(statuts).forEach(id=>{
+    if(statuts[id] !== "nonconforme") return;
+    const info = ITEM_INFO[id];
+    if(!info || !DR_VISIBLE_SECTIONS.includes(info.sectionKey)) return;
+    points.push({ section: info.section, label: info.label, anomalie: anomalies[id] || "" });
+  });
+  return points;
+}
+
 async function buildRegionAnomalies(){
   const statusEl = document.getElementById("dashStatus");
   const tbody = document.getElementById("dashAnomaliesBody");
@@ -1273,14 +1319,9 @@ async function buildRegionAnomalies(){
   const approvedOnly = all.filter(rec=> rec.approved === true);
 
   // dernière visite APPROUVÉE par agence (parmi les agences de la région)
+  const byAgenceSorted = groupVisitesByAgence(approvedOnly);
   const byAgence = {};
-  approvedOnly.forEach(rec=>{
-    const key = (rec.agence||"").trim().toLowerCase();
-    if(!key) return;
-    if(!byAgence[key] || new Date(rec.date) > new Date(byAgence[key].date)){
-      byAgence[key] = rec;
-    }
-  });
+  Object.keys(byAgenceSorted).forEach(key=>{ byAgence[key] = byAgenceSorted[key][0]; });
 
   // groupe par agence : liste des points non conformes de sa dernière visite
   const agencyGroups = [];
@@ -1292,28 +1333,28 @@ async function buildRegionAnomalies(){
     if(!rec) return;
     const nbEmployes = parseInt(rec.nb_employes, 10);
     if(!isNaN(nbEmployes)){ totalEmployesRegion += nbEmployes; agencesAvecEffectifRegion++; }
-    const statuts = rec.statuts || {};
-    const anomalies = rec.anomalies || {};
-    const points = [];
-    Object.keys(statuts).forEach(id=>{
-      if(statuts[id] !== "nonconforme") return;
-      const info = ITEM_INFO[id];
-      if(!info || !DR_VISIBLE_SECTIONS.includes(info.sectionKey)) return; // sections hors périmètre DR
-      points.push({
-        section: info.section,
-        label: info.label,
-        anomalie: anomalies[id] || ""
-      });
-    });
+    const points = drVisiblePoints(rec);
     if(points.length === 0) return;
     totalPoints += points.length;
-    agencyGroups.push({ agence: name, date: rec.date || "-", points });
+
+    // visite précédente laissée "en cours" de correction et remplacée par celle-ci
+    const sortedForAgence = byAgenceSorted[name.trim().toLowerCase()];
+    let previousUnfinished = null;
+    if(sortedForAgence && sortedForAgence.length > 1 && sortedForAgence[0].id === rec.id && sortedForAgence[1].correction_status === "in_progress"){
+      previousUnfinished = { id: sortedForAgence[1].id, date: sortedForAgence[1].date, points: drVisiblePoints(sortedForAgence[1]) };
+    }
+
+    agencyGroups.push({
+      id: rec.id, agence: name, date: rec.date || "-", points,
+      correctionStatus: rec.correction_status || null,
+      previousUnfinished
+    });
   });
   agencyGroups.sort((a,b)=> b.points.length - a.points.length);
 
   tbody.innerHTML = "";
   if(agencyGroups.length === 0){
-    tbody.innerHTML = `<tr><td colspan="3" class="agence-empty">Aucun point non conforme relevé pour les agences de cette région (parmi les visites approuvées par le Manager).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="agence-empty">Aucun point non conforme relevé pour les agences de cette région (parmi les visites approuvées par le Manager).</td></tr>`;
   } else {
     agencyGroups.forEach(g=>{
       const tr = document.createElement("tr");
@@ -1322,8 +1363,13 @@ async function buildRegionAnomalies(){
         <td><b>${g.agence}</b></td>
         <td>${g.date}</td>
         <td><span class="taux-tag" style="${tierTagStyle(0)}">${g.points.length} point${g.points.length>1?"s":""}</span></td>
+        <td class="correction-cell"></td>
       `;
-      tr.addEventListener("click", ()=> openAgencyAnomalies(g, tr));
+      tr.addEventListener("click", (ev)=>{
+        if(ev.target.closest(".correction-cell")) return; // ne pas ouvrir/fermer le détail au clic sur les boutons
+        openAgencyAnomalies(g, tr);
+      });
+      renderCorrectionCell(tr.querySelector(".correction-cell"), g);
       tbody.appendChild(tr);
     });
   }
@@ -1366,6 +1412,101 @@ function openAgencyAnomalies(group, anchorRow){
   expandRow.appendChild(td);
   anchorRow.after(expandRow);
   expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+function renderCorrectionCell(cell, g){
+  cell.innerHTML = "";
+  let mainHTML = "";
+  if(g.correctionStatus === "done"){
+    mainHTML = `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Correction terminée</span>`;
+  } else if(g.correctionStatus === "in_progress"){
+    mainHTML = `
+      <span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;margin-right:6px;">Correction en cours</span>
+      <button class="btn btn-finish-correction" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Terminer la correction</button>
+    `;
+  } else {
+    mainHTML = `<button class="btn btn-start-correction" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Démarrer la correction</button>`;
+  }
+
+  const warningHTML = g.previousUnfinished
+    ? `<button class="btn btn-view-previous" style="display:block;margin-top:5px;background:#fde2e2;color:#a11313;border:none;padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:700;cursor:pointer;">⚠ Correction précédente (${g.previousUnfinished.date}) non finalisée — voir</button>`
+    : "";
+
+  cell.innerHTML = mainHTML + warningHTML;
+
+  const startBtn = cell.querySelector(".btn-start-correction");
+  if(startBtn) startBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); updateCorrectionStatus(g, "in_progress", cell); });
+  const finishBtn = cell.querySelector(".btn-finish-correction");
+  if(finishBtn) finishBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); updateCorrectionStatus(g, "done", cell); });
+  const viewPrevBtn = cell.querySelector(".btn-view-previous");
+  if(viewPrevBtn) viewPrevBtn.addEventListener("click", (ev)=>{
+    ev.stopPropagation();
+    openPreviousVisiteAnomalies(g, cell.closest("tr"));
+  });
+}
+
+function openPreviousVisiteAnomalies(g, anchorRow){
+  const existingExpand = document.querySelector("tr.anomalies-expand");
+  const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow && existingExpand.dataset.kind === "previous";
+  if(existingExpand) existingExpand.remove();
+  if(wasOpenForThisRow) return;
+
+  const nCols = anchorRow.children.length;
+  const expandRow = document.createElement("tr");
+  expandRow.className = "anomalies-expand";
+  expandRow.dataset.kind = "previous";
+  const td = document.createElement("td");
+  td.colSpan = nCols;
+
+  const header = document.createElement("div");
+  header.style.cssText = "font-size:11px;font-weight:700;color:#a11313;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;";
+  header.textContent = "Visite précédente du " + g.previousUnfinished.date + " — correction laissée en cours";
+  td.appendChild(header);
+
+  if(g.previousUnfinished.points.length === 0){
+    const empty = document.createElement("div");
+    empty.style.cssText = "font-size:12.5px;color:var(--muted);";
+    empty.textContent = "Aucun point non conforme dans le périmètre visible (Administration/RH/Commercial) pour cette visite.";
+    td.appendChild(empty);
+  } else {
+    g.previousUnfinished.points.forEach(p=>{
+      const row = document.createElement("div");
+      row.className = "hist-row";
+      row.style.flexDirection = "column";
+      row.style.alignItems = "stretch";
+      row.style.gap = "2px";
+      row.innerHTML = `
+        <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
+        <div style="font-size:12.5px;">${p.label}</div>
+        <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+      `;
+      td.appendChild(row);
+    });
+  }
+
+  expandRow.appendChild(td);
+  anchorRow.after(expandRow);
+  expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+async function updateCorrectionStatus(g, status, cell){
+  const btn = cell.querySelector("button");
+  if(btn) btn.disabled = true;
+  const who = currentUserName || currentUser.email;
+  const patch = { correction_status: status };
+  if(status === "in_progress"){ patch.correction_started_at = new Date().toISOString(); patch.correction_started_by = who; }
+  if(status === "done"){ patch.correction_done_at = new Date().toISOString(); patch.correction_done_by = who; }
+  try{
+    const { error } = await sb.from("visites").update(patch).eq("id", g.id);
+    if(error) throw error;
+    g.correctionStatus = status;
+    renderCorrectionCell(cell, g);
+    showToast(status === "in_progress" ? "Correction marquée comme démarrée." : "Correction marquée comme terminée.", 3000);
+  }catch(e){
+    console.warn("Mise à jour du statut de correction impossible :", e);
+    showToast("Impossible d'enregistrer — vérifie ta connexion internet.", 4000);
+    if(btn) btn.disabled = false;
+  }
 }
 
 
@@ -1416,6 +1557,13 @@ async function openHistory(agenceName, anchorRow){
         actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
       } else {
         actions += `<span style="font-size:11px;color:var(--muted);font-style:italic;">En attente de clôture par le RPO</span>`;
+      }
+    } else if(currentRole === "directeur_general"){
+      // lecture seule stricte : jamais d'approbation ni de suppression
+      if(r.approved || r.closed){
+        actions = `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`;
+      } else {
+        actions = `<span style="font-size:11px;color:var(--muted);font-style:italic;">En attente de clôture par le RPO</span>`;
       }
     } else {
       if(r.approved){
@@ -1680,12 +1828,14 @@ function applyRoleUI(){
     label.textContent = displayName + " · Manager (lecture seule)";
   } else if(currentRole === "directeur_regional"){
     label.textContent = displayName + " · Directeur régional — Région " + (currentUserRegion || "?") + " (lecture seule)";
+  } else if(currentRole === "directeur_general"){
+    label.textContent = displayName + " · Directeur général (lecture seule)";
   } else {
     label.textContent = displayName + " · RPO";
   }
 
   const importLabel = document.getElementById("fileImport")?.closest("label");
-  const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional");
+  const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general");
 
   if(isReadOnlyRole){
     document.getElementById("tabInspection").style.display = "none";
