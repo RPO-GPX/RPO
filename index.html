@@ -316,6 +316,7 @@
   <div class="tabs">
     <button class="tab active" id="tabInspection">Visite</button>
     <button class="tab" id="tabDashboard">Tableau de bord</button>
+    <button class="tab" id="tabEvolution">Évolution agence</button>
   </div>
   <div class="sep"></div>
   <div class="taux-pill">Taux global <b id="tbGlobal">–</b></div>
@@ -374,6 +375,30 @@
         </label>
       </div>
     </div>
+    <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <input type="text" id="dashSearch" placeholder="🔍 Rechercher une agence…" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
+      <select id="dashStatusFilter" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;">
+        <option value="">Tous les statuts</option>
+        <option value="approved">Approuvé</option>
+        <option value="closed">Clôturée (non approuvée)</option>
+        <option value="pending">En cours</option>
+        <option value="none">Aucune visite</option>
+      </select>
+      <span id="dashFilterCount" style="font-size:11.5px;color:var(--muted);"></span>
+      <button class="btn" id="btnToggleTopFlop" style="background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">🏆 Top 10 / Flop 10</button>
+    </div>
+    <div id="topFlopPanel" style="display:none;margin-bottom:16px;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:260px;background:#f3faf4;border:1px solid #cfe9d3;border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12.5px;font-weight:700;color:#1c6b2e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">🏆 Top 10 — Meilleures agences</div>
+          <div id="topFlopBest"></div>
+        </div>
+        <div style="flex:1;min-width:260px;background:#fdf1f1;border:1px solid #f3caca;border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12.5px;font-weight:700;color:#a11313;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">⚠️ Flop 10 — Agences à améliorer</div>
+          <div id="topFlopWorst"></div>
+        </div>
+      </div>
+    </div>
     <table class="dash" id="dashRankingTable">
       <thead><tr><th>Rang</th><th>Agence</th><th>Dernière visite</th><th>RPO</th><th>Taux global</th><th>Appréciation</th><th>Statut</th><th>Effectif</th><th>Correction</th></tr></thead>
       <tbody id="dashBody"></tbody>
@@ -382,6 +407,50 @@
       <thead><tr><th>Agence</th><th>Dernière visite</th><th>Points non conformes</th><th>Correction</th></tr></thead>
       <tbody id="dashAnomaliesBody"></tbody>
     </table>
+  </div>
+</div>
+
+<div class="view" id="viewEvolution">
+  <div class="dash-wrap">
+    <div class="dash-toolbar">
+      <h2 style="margin:0;font-size:18px;">Évolution de la conformité par agence</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="status" id="evolStatus"></span>
+      </div>
+    </div>
+    <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <select id="evolAgenceSelect" style="flex:1;min-width:240px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;">
+        <option value="">— Choisir une agence —</option>
+      </select>
+    </div>
+    <div id="evolEmpty" style="padding:30px;text-align:center;color:var(--muted);font-size:13.5px;">Sélectionne une agence ci-dessus pour voir l'évolution de son taux de conformité visite après visite.</div>
+    <div id="evolContent" style="display:none;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Visites</div>
+          <div style="font-size:22px;font-weight:700;color:var(--navy);" id="evolStatCount">–</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Dernier taux</div>
+          <div style="font-size:22px;font-weight:700;" id="evolStatLast">–</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Taux moyen</div>
+          <div style="font-size:22px;font-weight:700;color:var(--navy);" id="evolStatAvg">–</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tendance</div>
+          <div style="font-size:22px;font-weight:700;" id="evolStatTrend">–</div>
+        </div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;overflow-x:auto;">
+        <svg id="evolChart" width="100%" height="280" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <table class="dash">
+        <thead><tr><th>Date</th><th>Taux global</th><th>Appréciation</th><th>RPO</th><th>Statut</th></tr></thead>
+        <tbody id="evolTableBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -651,6 +720,8 @@ let currentUser = null;
 let currentRole = null; // 'inspecteur' | 'manager' | 'directeur_regional'
 let currentUserName = null;
 let currentUserRegion = null; // région du Directeur régional ('Est'|'Ouest'|'Centre'|'Sud'), sinon null
+let lastRankingRows = []; // dernières lignes du tableau de bord Manager/DG (pour le panneau Top 5 / Flop 5)
+let lastAnomalyGroups = []; // dernier regroupement par agence de la vue DR (pour le panneau Top 5 / Flop 5)
 let realtimeChannel = null;
 // ======================================================================
 const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
@@ -1165,14 +1236,90 @@ function correctionCarryoverWarningHTML(sortedApprovedForAgence, latestId){
   return `<div class="taux-tag" style="background:#fde2e2;color:#a11313;margin-top:4px;font-size:10.5px;font-weight:700;">⚠ Correction précédente (${previous.date}) non finalisée</div>`;
 }
 
+// ======================================================================
+// RECHERCHE / FILTRE DU TABLEAU DE BORD
+// ======================================================================
+function escapeHtml(s){
+  const div = document.createElement("div");
+  div.textContent = s || "";
+  return div.innerHTML;
+}
+
+function normalizeSearch(s){
+  return (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+}
+
+function applyDashFilters(){
+  const q = normalizeSearch(document.getElementById("dashSearch").value);
+  const statusFilter = document.getElementById("dashStatusFilter").value;
+  const activeTable = (currentRole === "directeur_regional") ? "dashAnomaliesBody" : "dashBody";
+  const rows = document.querySelectorAll("#"+activeTable+" > tr");
+  let visibleCount = 0;
+  rows.forEach(tr=>{
+    if(!tr.dataset.agence){ return; } // ligne "aucun résultat" éventuelle, on ne la compte pas
+    const matchesSearch = !q || tr.dataset.agence.includes(q);
+    const matchesStatus = !statusFilter || tr.dataset.status === statusFilter;
+    const visible = matchesSearch && matchesStatus;
+    tr.style.display = visible ? "" : "none";
+    if(visible) visibleCount++;
+  });
+  const countEl = document.getElementById("dashFilterCount");
+  if(q || statusFilter){
+    countEl.textContent = visibleCount + " agence" + (visibleCount>1?"s":"") + " affichée" + (visibleCount>1?"s":"");
+  } else {
+    countEl.textContent = "";
+  }
+}
+
+document.getElementById("dashSearch").addEventListener("input", applyDashFilters);
+document.getElementById("dashStatusFilter").addEventListener("change", applyDashFilters);
+
+// ======================================================================
+// PANNEAU TOP 5 / FLOP 5
+// ======================================================================
+function topFlopItemHTML(name, badgeHTML){
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:12.5px;">
+    <span>${name}</span>${badgeHTML}
+  </div>`;
+}
+
+function buildTopFlop(){
+  const panel = document.getElementById("topFlopPanel");
+  if(currentRole === "directeur_regional") return; // non pertinent pour le DR
+  if(panel.style.display === "none") return; // pas besoin de calculer si le panneau est fermé
+  const bestEl = document.getElementById("topFlopBest");
+  const worstEl = document.getElementById("topFlopWorst");
+
+  // Manager / DG : classement national par taux (agences ayant au moins une visite)
+  const withRec = lastRankingRows.filter(r=> r.rec && r.rec.taux != null);
+  if(withRec.length === 0){
+    bestEl.innerHTML = worstEl.innerHTML = `<div style="font-size:12px;color:var(--muted);">Aucune donnée.</div>`;
+    return;
+  }
+  const sortedDesc = [...withRec].sort((a,b)=> b.rec.taux - a.rec.taux);
+  const best = sortedDesc.slice(0,10);
+  const worst = sortedDesc.slice(-10).reverse();
+  bestEl.innerHTML = best.map(r=> topFlopItemHTML(r.name, `<span class="taux-tag" style="${tierTagStyle(r.rec.taux)}">${Math.round(r.rec.taux*100)}%</span>`)).join("");
+  worstEl.innerHTML = worst.map(r=> topFlopItemHTML(r.name, `<span class="taux-tag" style="${tierTagStyle(r.rec.taux)}">${Math.round(r.rec.taux*100)}%</span>`)).join("");
+}
+
+document.getElementById("btnToggleTopFlop").addEventListener("click", ()=>{
+  const panel = document.getElementById("topFlopPanel");
+  const willShow = panel.style.display === "none";
+  panel.style.display = willShow ? "" : "none";
+  if(willShow) buildTopFlop();
+});
+
 function correctionCellHTML(rec){
   if(rec.correction_status === "done"){
     return `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Terminée</span>
-      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${rec.correction_done_by || "—"}</div>`;
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${escapeHtml(rec.correction_done_by) || "—"}</div>
+      ${rec.correction_done_note ? `<div style="font-size:10.5px;color:var(--text);margin-top:2px;font-style:italic;">"${escapeHtml(rec.correction_done_note)}"</div>` : ""}`;
   }
   if(rec.correction_status === "in_progress"){
     return `<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">En cours</span>
-      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${rec.correction_started_by || "—"}</div>`;
+      <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">par ${escapeHtml(rec.correction_started_by) || "—"}</div>
+      ${rec.correction_started_note ? `<div style="font-size:10.5px;color:var(--text);margin-top:2px;font-style:italic;">"${escapeHtml(rec.correction_started_note)}"</div>` : ""}`;
   }
   return `<span class="taux-tag" style="background:#eee;color:#888;">Non démarrée</span>`;
 }
@@ -1183,12 +1330,15 @@ async function buildDashboard(){
     document.getElementById("dashRankingTable").style.display = "none";
     document.getElementById("dashAnomaliesTable").style.display = "";
     document.getElementById("dashTitle").textContent = "Points non conformes (Administration / RH / Commercial et Marketing) — Région " + (currentUserRegion || "?");
+    document.getElementById("btnToggleTopFlop").style.display = "none";
+    document.getElementById("topFlopPanel").style.display = "none";
     await buildRegionAnomalies();
     return;
   }
   document.getElementById("dashRankingTable").style.display = "";
   document.getElementById("dashAnomaliesTable").style.display = "none";
   document.getElementById("dashTitle").textContent = "Comparatif de conformité — Toutes agences";
+  document.getElementById("btnToggleTopFlop").style.display = "";
 
   const statusEl = document.getElementById("dashStatus");
   statusEl.textContent = "Chargement…";
@@ -1216,20 +1366,23 @@ async function buildDashboard(){
     const ta = a.rec ? a.rec.taux : -1, tb = b.rec ? b.rec.taux : -1;
     return (tb??-1) - (ta??-1);
   });
+  lastRankingRows = rows;
 
   const tbody = document.getElementById("dashBody");
   tbody.innerHTML = "";
-  const showEmployesCol = (currentRole === "manager" || currentRole === "directeur_general");
+  const showEmployesCol = (currentRole === "manager" || currentRole === "directeur_general" || currentRole === "admin");
   let rank = 0;
   let totalEmployes = 0;
   let agencesAvecEffectif = 0;
   rows.forEach(r=>{
     rank++;
     const tr = document.createElement("tr");
+    tr.dataset.agence = normalizeSearch(r.name);
     if(r.rec){
       const nbEmployes = parseInt(r.rec.nb_employes, 10);
       const nbEmployesValid = !isNaN(nbEmployes);
       if(nbEmployesValid){ totalEmployes += nbEmployes; agencesAvecEffectif++; }
+      tr.dataset.status = r.rec.approved ? "approved" : (r.rec.closed ? "closed" : "pending");
       tr.className = "clickable";
       tr.addEventListener("click", ()=> openHistory(r.name, tr));
       tr.innerHTML = `
@@ -1251,6 +1404,7 @@ async function buildDashboard(){
         <td>${correctionCellHTML(r.rec)}${correctionCarryoverWarningHTML(byAgenceSorted[r.name.trim().toLowerCase()], r.rec.id)}</td>
       `;
     } else {
+      tr.dataset.status = "none";
       tr.innerHTML = `
         <td class="rank-badge">–</td>
         <td><b>${r.name}</b></td>
@@ -1259,6 +1413,10 @@ async function buildDashboard(){
     }
     tbody.appendChild(tr);
   });
+
+  document.getElementById("dashStatusFilter").style.display = "";
+  applyDashFilters();
+  buildTopFlop();
 
   const pillTotal = document.getElementById("pillTotalEmployes");
   if(showEmployesCol){
@@ -1347,10 +1505,13 @@ async function buildRegionAnomalies(){
     agencyGroups.push({
       id: rec.id, agence: name, date: rec.date || "-", points,
       correctionStatus: rec.correction_status || null,
+      correctionStartedNote: rec.correction_started_note || "",
+      correctionDoneNote: rec.correction_done_note || "",
       previousUnfinished
     });
   });
   agencyGroups.sort((a,b)=> b.points.length - a.points.length);
+  lastAnomalyGroups = agencyGroups;
 
   tbody.innerHTML = "";
   if(agencyGroups.length === 0){
@@ -1359,6 +1520,7 @@ async function buildRegionAnomalies(){
     agencyGroups.forEach(g=>{
       const tr = document.createElement("tr");
       tr.className = "clickable";
+      tr.dataset.agence = normalizeSearch(g.agence);
       tr.innerHTML = `
         <td><b>${g.agence}</b></td>
         <td>${g.date}</td>
@@ -1373,6 +1535,9 @@ async function buildRegionAnomalies(){
       tbody.appendChild(tr);
     });
   }
+  document.getElementById("dashStatusFilter").style.display = "none";
+  applyDashFilters();
+  buildTopFlop();
 
   statusEl.textContent = agencyGroups.length+" agence"+(agencyGroups.length>1?"s":"")+" concernée"+(agencyGroups.length>1?"s":"")
     +" · "+totalPoints+" point"+(totalPoints>1?"s":"")+" non conforme"+(totalPoints>1?"s":"")
@@ -1418,11 +1583,13 @@ function renderCorrectionCell(cell, g){
   cell.innerHTML = "";
   let mainHTML = "";
   if(g.correctionStatus === "done"){
-    mainHTML = `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Correction terminée</span>`;
+    mainHTML = `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Correction terminée</span>
+      ${g.correctionDoneNote ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;white-space:normal;">${escapeHtml(g.correctionDoneNote)}</div>` : ""}`;
   } else if(g.correctionStatus === "in_progress"){
     mainHTML = `
       <span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;margin-right:6px;">Correction en cours</span>
-      <button class="btn btn-finish-correction" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Terminer la correction</button>
+      ${g.correctionStartedNote ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;white-space:normal;">${escapeHtml(g.correctionStartedNote)}</div>` : ""}
+      <button class="btn btn-finish-correction" style="display:block;margin-top:5px;background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Terminer la correction</button>
     `;
   } else {
     mainHTML = `<button class="btn btn-start-correction" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Démarrer la correction</button>`;
@@ -1435,13 +1602,44 @@ function renderCorrectionCell(cell, g){
   cell.innerHTML = mainHTML + warningHTML;
 
   const startBtn = cell.querySelector(".btn-start-correction");
-  if(startBtn) startBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); updateCorrectionStatus(g, "in_progress", cell); });
+  if(startBtn) startBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); showCorrectionNoteForm(cell, g, "in_progress"); });
   const finishBtn = cell.querySelector(".btn-finish-correction");
-  if(finishBtn) finishBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); updateCorrectionStatus(g, "done", cell); });
+  if(finishBtn) finishBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); showCorrectionNoteForm(cell, g, "done"); });
   const viewPrevBtn = cell.querySelector(".btn-view-previous");
   if(viewPrevBtn) viewPrevBtn.addEventListener("click", (ev)=>{
     ev.stopPropagation();
     openPreviousVisiteAnomalies(g, cell.closest("tr"));
+  });
+}
+
+// Petit formulaire en ligne pour saisir une note explicative avant de démarrer/terminer une correction
+function showCorrectionNoteForm(cell, g, status){
+  const existingNote = status === "done" ? (g.correctionDoneNote || "") : (g.correctionStartedNote || "");
+  const label = status === "done" ? "Qu'est-ce qui a été fait pour corriger ?" : "Que comptes-tu faire pour corriger ?";
+  cell.innerHTML = `
+    <div style="min-width:220px;" onclick="event.stopPropagation()">
+      <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">${label}</div>
+      <textarea class="correction-note-input" rows="3" placeholder="Explique ce qui a été fait, ex: agents recrutés le 12/08, affichage remis à jour…" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit;resize:vertical;">${escapeHtml(existingNote)}</textarea>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn btn-note-validate" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Valider</button>
+        <button class="btn btn-note-cancel" style="background:#eee;color:#555;border:none;padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Annuler</button>
+      </div>
+    </div>
+  `;
+  const textarea = cell.querySelector(".correction-note-input");
+  textarea.focus();
+  cell.querySelector(".btn-note-validate").addEventListener("click", (ev)=>{
+    ev.stopPropagation();
+    const note = textarea.value.trim();
+    if(!note){
+      showToast("Merci de préciser ce qui a été fait avant de valider.", 3500);
+      return;
+    }
+    updateCorrectionStatus(g, status, cell, note);
+  });
+  cell.querySelector(".btn-note-cancel").addEventListener("click", (ev)=>{
+    ev.stopPropagation();
+    renderCorrectionCell(cell, g);
   });
 }
 
@@ -1489,17 +1687,19 @@ function openPreviousVisiteAnomalies(g, anchorRow){
   expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 
-async function updateCorrectionStatus(g, status, cell){
+async function updateCorrectionStatus(g, status, cell, note){
   const btn = cell.querySelector("button");
   if(btn) btn.disabled = true;
   const who = currentUserName || currentUser.email;
   const patch = { correction_status: status };
-  if(status === "in_progress"){ patch.correction_started_at = new Date().toISOString(); patch.correction_started_by = who; }
-  if(status === "done"){ patch.correction_done_at = new Date().toISOString(); patch.correction_done_by = who; }
+  if(status === "in_progress"){ patch.correction_started_at = new Date().toISOString(); patch.correction_started_by = who; patch.correction_started_note = note || null; }
+  if(status === "done"){ patch.correction_done_at = new Date().toISOString(); patch.correction_done_by = who; patch.correction_done_note = note || null; }
   try{
     const { error } = await sb.from("visites").update(patch).eq("id", g.id);
     if(error) throw error;
     g.correctionStatus = status;
+    if(status === "in_progress") g.correctionStartedNote = note || "";
+    if(status === "done") g.correctionDoneNote = note || "";
     renderCorrectionCell(cell, g);
     showToast(status === "in_progress" ? "Correction marquée comme démarrée." : "Correction marquée comme terminée.", 3000);
   }catch(e){
@@ -1547,14 +1747,18 @@ async function openHistory(agenceName, anchorRow){
 
     // ---- actions selon rôle et statut (en cours / clôturée / approuvée) ----
     let actions;
-    if(currentRole === "manager" || currentRole === "directeur_regional"){
+    if(currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "admin"){
       actions = `<button class="load-btn" data-view="${r.id}">Voir la synthèse →</button>`;
       if(r.approved){
-        actions += `<button class="load-btn" data-revoke="${r.id}" style="color:#8a5a00;">↩ Annuler l'approbation</button>`;
-        actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+        if(currentRole === "admin"){
+          actions += `<button class="load-btn" data-revoke="${r.id}" style="color:#8a5a00;">↩ Annuler l'approbation</button>`;
+          actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+        }
       } else if(r.closed){
-        actions += `<button class="load-btn" data-approve="${r.id}" style="color:#1c6b2e;">✓ Approuver</button>`;
-        actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+        if(currentRole === "manager" || currentRole === "admin"){
+          actions += `<button class="load-btn" data-approve="${r.id}" style="color:#1c6b2e;">✓ Approuver</button>`;
+          actions += `<button class="load-btn" data-del="${r.id}" style="color:#a11313;">Supprimer</button>`;
+        }
       } else {
         actions += `<span style="font-size:11px;color:var(--muted);font-style:italic;">En attente de clôture par le RPO</span>`;
       }
@@ -1676,9 +1880,162 @@ async function openHistory(agenceName, anchorRow){
 function switchView(name){
   document.getElementById("viewInspection").classList.toggle("active", name==="inspection");
   document.getElementById("viewDashboard").classList.toggle("active", name==="dashboard");
+  document.getElementById("viewEvolution").classList.toggle("active", name==="evolution");
   document.getElementById("tabInspection").classList.toggle("active", name==="inspection");
   document.getElementById("tabDashboard").classList.toggle("active", name==="dashboard");
+  document.getElementById("tabEvolution").classList.toggle("active", name==="evolution");
   if(name==="dashboard") buildDashboard();
+  if(name==="evolution") initEvolutionView();
+}
+
+document.getElementById("tabEvolution").addEventListener("click", ()=> switchView("evolution"));
+
+// ======================================================================
+// ÉVOLUTION AGENCE (graphique du taux de conformité visite après visite)
+// ======================================================================
+let evolutionInitDone = false;
+
+function initEvolutionView(){
+  const select = document.getElementById("evolAgenceSelect");
+  if(!evolutionInitDone){
+    const agences = (currentRole === "directeur_regional" && currentUserRegion)
+      ? agencesForRegion(currentUserRegion)
+      : AGENCES;
+    const sorted = [...agences].sort((a,b)=> a.localeCompare(b, "fr"));
+    sorted.forEach(name=>{
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", ()=> buildEvolutionChart(select.value));
+    evolutionInitDone = true;
+  }
+  if(select.value) buildEvolutionChart(select.value);
+}
+
+async function buildEvolutionChart(agenceName){
+  const empty = document.getElementById("evolEmpty");
+  const content = document.getElementById("evolContent");
+  const statusEl = document.getElementById("evolStatus");
+  if(!agenceName){
+    empty.style.display = "";
+    content.style.display = "none";
+    statusEl.textContent = "";
+    return;
+  }
+  statusEl.textContent = "Chargement…";
+  let all = [];
+  try{
+    all = await getAllVisites();
+  }catch(e){
+    statusEl.textContent = "Impossible de charger les données — vérifie ta connexion internet.";
+    return;
+  }
+
+  let visites = all.filter(rec=> (rec.agence||"").trim().toLowerCase() === agenceName.trim().toLowerCase());
+  if(currentRole === "directeur_regional") visites = visites.filter(rec=> rec.approved === true);
+  visites = visites.filter(rec=> rec.taux != null);
+  visites.sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+  if(visites.length === 0){
+    empty.style.display = "";
+    empty.textContent = "Aucune visite avec un taux calculé n'a été trouvée pour cette agence.";
+    content.style.display = "none";
+    statusEl.textContent = "";
+    return;
+  }
+
+  empty.style.display = "none";
+  content.style.display = "";
+  statusEl.textContent = visites.length+" visite"+(visites.length>1?"s":"")+" (temps réel)";
+
+  // ---- statistiques ----
+  const last = visites[visites.length-1];
+  const avg = visites.reduce((s,r)=> s+r.taux, 0) / visites.length;
+  document.getElementById("evolStatCount").textContent = visites.length;
+  const lastEl = document.getElementById("evolStatLast");
+  lastEl.textContent = Math.round(last.taux*100)+"%";
+  lastEl.style.color = last.taux>=0.8 ? "#1c6b2e" : (last.taux>=0.51 ? "#8a5a00" : "#a11313");
+  document.getElementById("evolStatAvg").textContent = Math.round(avg*100)+"%";
+
+  const trendEl = document.getElementById("evolStatTrend");
+  if(visites.length < 2){
+    trendEl.textContent = "—";
+    trendEl.style.color = "var(--muted)";
+  } else {
+    const diff = visites[visites.length-1].taux - visites[visites.length-2].taux;
+    const diffPct = Math.round(diff*100);
+    if(diffPct > 0){ trendEl.textContent = "▲ +"+diffPct+" pt"+(Math.abs(diffPct)>1?"s":""); trendEl.style.color = "#1c6b2e"; }
+    else if(diffPct < 0){ trendEl.textContent = "▼ "+diffPct+" pt"+(Math.abs(diffPct)>1?"s":""); trendEl.style.color = "#a11313"; }
+    else { trendEl.textContent = "= stable"; trendEl.style.color = "var(--muted)"; }
+  }
+
+  // ---- graphique SVG ----
+  drawEvolutionSvg(visites);
+
+  // ---- tableau détaillé ----
+  const tbody = document.getElementById("evolTableBody");
+  tbody.innerHTML = "";
+  [...visites].reverse().forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.date||"-"}</td>
+      <td><span class="taux-tag" style="${tierTagStyle(r.taux)}">${Math.round(r.taux*100)}%</span></td>
+      <td>${apprLabel(r.taux)}</td>
+      <td style="font-size:11.5px;color:var(--muted);">${r.rpo_nom||r.rpo_email||"—"}</td>
+      <td>${r.approved
+            ? '<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Approuvé</span>'
+            : (r.closed
+                ? '<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">Clôturée</span>'
+                : '<span class="taux-tag" style="background:#eee;color:#888;">En cours</span>')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function drawEvolutionSvg(visites){
+  const svg = document.getElementById("evolChart");
+  const W = 900, H = 280;
+  const padL = 44, padR = 20, padT = 20, padB = 40;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const n = visites.length;
+  const xFor = (i)=> n === 1 ? padL + plotW/2 : padL + (plotW * i / (n-1));
+  const yFor = (taux)=> padT + plotH * (1 - taux);
+
+  let svgParts = [];
+
+  // grille + labels Y (0/25/50/75/100%)
+  [0, 0.25, 0.5, 0.75, 1].forEach(t=>{
+    const y = yFor(t);
+    svgParts.push(`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e2da" stroke-width="1"/>`);
+    svgParts.push(`<text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#8b8577">${Math.round(t*100)}%</text>`);
+  });
+
+  // zones de seuil (repères visuels légers)
+  svgParts.push(`<line x1="${padL}" y1="${yFor(0.8)}" x2="${W-padR}" y2="${yFor(0.8)}" stroke="#1c6b2e" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
+  svgParts.push(`<line x1="${padL}" y1="${yFor(0.51)}" x2="${W-padR}" y2="${yFor(0.51)}" stroke="#a11313" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
+
+  // ligne de la courbe
+  const points = visites.map((r,i)=> `${xFor(i)},${yFor(r.taux)}`).join(" ");
+  svgParts.push(`<polyline points="${points}" fill="none" stroke="#0a2540" stroke-width="2.5"/>`);
+
+  // points + labels de date
+  visites.forEach((r,i)=>{
+    const x = xFor(i), y = yFor(r.taux);
+    const color = r.taux>=0.8 ? "#1c6b2e" : (r.taux>=0.51 ? "#c98a00" : "#a11313");
+    svgParts.push(`<circle cx="${x}" cy="${y}" r="4.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`);
+    svgParts.push(`<text x="${x}" y="${y-12}" text-anchor="middle" font-size="11" font-weight="700" fill="#2a2620">${Math.round(r.taux*100)}%</text>`);
+    // limiter le nombre de labels de date affichés si trop de visites
+    if(n <= 14 || i % Math.ceil(n/14) === 0 || i === n-1){
+      const label = (r.date||"").slice(5); // MM-JJ
+      svgParts.push(`<text x="${x}" y="${H-padB+16}" text-anchor="middle" font-size="10" fill="#8b8577" transform="rotate(-40 ${x} ${H-padB+16})">${label}</text>`);
+    }
+  });
+
+  svg.innerHTML = svgParts.join("");
 }
 
 // ======================================================================
@@ -1830,6 +2187,8 @@ function applyRoleUI(){
     label.textContent = displayName + " · Directeur régional — Région " + (currentUserRegion || "?") + " (lecture seule)";
   } else if(currentRole === "directeur_general"){
     label.textContent = displayName + " · Directeur général (lecture seule)";
+  } else if(currentRole === "admin"){
+    label.textContent = displayName + " · Admin (accès complet)";
   } else {
     label.textContent = displayName + " · RPO";
   }
@@ -1844,6 +2203,15 @@ function applyRoleUI(){
     document.getElementById("btnPrint").style.display = "none";
     document.getElementById("btnClose").style.display = "none";
     if(importLabel) importLabel.style.display = "none";
+    switchView("dashboard");
+  } else if(currentRole === "admin"){
+    // accès complet : garde tout visible (onglet Visite + Tableau de bord, tous les boutons), démarre sur le tableau de bord
+    document.getElementById("tabInspection").style.display = "";
+    document.getElementById("btnNew").style.display = "";
+    document.getElementById("btnExpandAll").style.display = "";
+    document.getElementById("btnPrint").style.display = "";
+    document.getElementById("btnClose").style.display = "";
+    if(importLabel) importLabel.style.display = "";
     switchView("dashboard");
   } else {
     switchView("inspection");
