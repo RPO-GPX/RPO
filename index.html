@@ -386,6 +386,7 @@
       </select>
       <span id="dashFilterCount" style="font-size:11.5px;color:var(--muted);"></span>
       <button class="btn" id="btnToggleTopFlop" style="background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">🏆 Top 10 / Flop 10</button>
+      <button class="btn" id="btnToggleCorrection" style="display:none;background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">🔓 Correction DR : Activée</button>
     </div>
     <div id="topFlopPanel" style="display:none;margin-bottom:16px;">
       <div style="display:flex;gap:14px;flex-wrap:wrap;">
@@ -722,6 +723,7 @@ let currentUserName = null;
 let currentUserRegion = null; // région du Directeur régional ('Est'|'Ouest'|'Centre'|'Sud'), sinon null
 let lastRankingRows = []; // dernières lignes du tableau de bord Manager/DG (pour le panneau Top 5 / Flop 5)
 let lastAnomalyGroups = []; // dernier regroupement par agence de la vue DR (pour le panneau Top 5 / Flop 5)
+let correctionEnabled = true; // interrupteur global : le DR peut-il démarrer/terminer une correction ?
 let realtimeChannel = null;
 // ======================================================================
 const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
@@ -1310,6 +1312,8 @@ document.getElementById("btnToggleTopFlop").addEventListener("click", ()=>{
   if(willShow) buildTopFlop();
 });
 
+document.getElementById("btnToggleCorrection").addEventListener("click", toggleCorrectionEnabled);
+
 function correctionCellHTML(rec){
   if(rec.correction_status === "done"){
     return `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Terminée</span>
@@ -1325,6 +1329,7 @@ function correctionCellHTML(rec){
 }
 
 async function buildDashboard(){
+  await fetchCorrectionEnabled();
   // Le Directeur régional a une vue dédiée : uniquement les points non conformes de sa région
   if(currentRole === "directeur_regional"){
     document.getElementById("dashRankingTable").style.display = "none";
@@ -1332,6 +1337,7 @@ async function buildDashboard(){
     document.getElementById("dashTitle").textContent = "Points non conformes (Administration / RH / Commercial et Marketing) — Région " + (currentUserRegion || "?");
     document.getElementById("btnToggleTopFlop").style.display = "none";
     document.getElementById("topFlopPanel").style.display = "none";
+    document.getElementById("btnToggleCorrection").style.display = "none";
     await buildRegionAnomalies();
     return;
   }
@@ -1339,6 +1345,7 @@ async function buildDashboard(){
   document.getElementById("dashAnomaliesTable").style.display = "none";
   document.getElementById("dashTitle").textContent = "Comparatif de conformité — Toutes agences";
   document.getElementById("btnToggleTopFlop").style.display = "";
+  document.getElementById("btnToggleCorrection").style.display = (currentRole === "admin") ? "" : "none";
 
   const statusEl = document.getElementById("dashStatus");
   statusEl.textContent = "Chargement…";
@@ -1589,10 +1596,14 @@ function renderCorrectionCell(cell, g){
     mainHTML = `
       <span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;margin-right:6px;">Correction en cours</span>
       ${g.correctionStartedNote ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;white-space:normal;">${escapeHtml(g.correctionStartedNote)}</div>` : ""}
-      <button class="btn btn-finish-correction" style="display:block;margin-top:5px;background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Terminer la correction</button>
+      ${correctionEnabled
+        ? `<button class="btn btn-finish-correction" style="display:block;margin-top:5px;background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Terminer la correction</button>`
+        : `<div style="font-size:10.5px;color:var(--muted);font-style:italic;margin-top:4px;">🔒 Fonctionnalité désactivée temporairement</div>`}
     `;
-  } else {
+  } else if(correctionEnabled){
     mainHTML = `<button class="btn btn-start-correction" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">Démarrer la correction</button>`;
+  } else {
+    mainHTML = `<span class="taux-tag" style="background:#eee;color:#888;">🔒 Correction désactivée temporairement</span>`;
   }
 
   const warningHTML = g.previousUnfinished
@@ -2225,7 +2236,52 @@ function setupRealtime(){
       const dashActive = document.getElementById("viewDashboard").classList.contains("active");
       if(dashActive) buildDashboard();
     })
+    .on("postgres_changes", {event:"*", schema:"public", table:"app_settings"}, async ()=>{
+      await fetchCorrectionEnabled();
+      const dashActive = document.getElementById("viewDashboard").classList.contains("active");
+      if(dashActive) buildDashboard();
+    })
     .subscribe();
+}
+
+// ======================================================================
+// INTERRUPTEUR "CORRECTION DR" (activable/désactivable par Admin)
+// ======================================================================
+async function fetchCorrectionEnabled(){
+  try{
+    const { data, error } = await sb.from("app_settings").select("correction_enabled").eq("id", 1).single();
+    if(error) throw error;
+    correctionEnabled = data ? (data.correction_enabled !== false) : true;
+  }catch(e){
+    console.warn("Impossible de lire le réglage correction_enabled, valeur par défaut = activée :", e);
+    correctionEnabled = true;
+  }
+  const btn = document.getElementById("btnToggleCorrection");
+  if(btn){
+    btn.textContent = correctionEnabled ? "🔓 Correction DR : Activée" : "🔒 Correction DR : Désactivée";
+    btn.style.background = correctionEnabled ? "#fff" : "#fdf1d6";
+    btn.style.color = correctionEnabled ? "var(--navy)" : "#8a5a00";
+    btn.style.borderColor = correctionEnabled ? "var(--navy)" : "#8a5a00";
+  }
+}
+
+async function toggleCorrectionEnabled(){
+  const next = !correctionEnabled;
+  const confirmMsg = next
+    ? "Réactiver la fonctionnalité de correction pour tous les Directeurs régionaux ?"
+    : "Désactiver la fonctionnalité de correction pour tous les Directeurs régionaux, jusqu'à nouvel ordre ?";
+  const ok = await askConfirm(confirmMsg);
+  if(!ok) return;
+  try{
+    const { error } = await sb.from("app_settings").upsert({ id: 1, correction_enabled: next });
+    if(error) throw error;
+    correctionEnabled = next;
+    await fetchCorrectionEnabled();
+    showToast(next ? "Correction DR réactivée." : "Correction DR désactivée jusqu'à nouvel ordre.", 3500);
+  }catch(e){
+    console.warn("Impossible de mettre à jour le réglage :", e);
+    showToast("Impossible d'enregistrer — vérifie ta connexion internet.", 4000);
+  }
 }
 
 async function afterLogin(user){
