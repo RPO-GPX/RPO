@@ -278,6 +278,7 @@
   .pv-sig .sigline{ margin-top:44px; border-top:1px solid #000; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -356,6 +357,13 @@
 
   <div class="wrap" id="sections"></div>
 
+  <div class="header-card" style="margin-top:12px;">
+    <div class="field" style="flex:1 1 100%;">
+      <label>Commentaire général de la visite (optionnel)</label>
+      <textarea id="fCommentaireGeneral" rows="4" placeholder="Remarques générales, contexte, points à suivre…" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+    </div>
+  </div>
+
   <div class="fab">
     <span>Taux pondéré <b id="fabTaux">–</b></span>
     <span id="fabNc">–</span>
@@ -368,11 +376,7 @@
       <h2 style="margin:0;font-size:18px;" id="dashTitle">Comparatif de conformité — Toutes agences</h2>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status" id="dashStatus">Chargement…</span>
-        <button class="btn" id="btnExport" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">Exporter (sauvegarde)</button>
-        <label class="btn" style="background:var(--navy);color:#fff;border-color:var(--navy);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">
-          Importer
-          <input type="file" id="fileImport" accept=".json" style="display:none;">
-        </label>
+        <button class="btn" id="btnExportExcel" style="background:#1c6b2e;color:#fff;border-color:#1c6b2e;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">📊 Export Excel</button>
       </div>
     </div>
     <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
@@ -506,6 +510,9 @@
     <tbody></tbody>
   </table>
 
+  <div class="pv-sub">Commentaire général de la visite</div>
+  <div id="pvCommentaireGeneral" style="padding:8px 2px;font-size:12.5px;white-space:pre-wrap;min-height:18px;">-</div>
+
   <div class="pv-sig">
     <div class="block">
       <div class="titlebar">Responsable d'agence</div>
@@ -526,7 +533,7 @@ const SECTIONS = [
 { key:"administration", name:"Administration", weight:25, items:[
   ["01","Registre de commerce SPA original (avec les articles correspondant à l'activité réelle)"],
   ["02","Déclaration d'existence disponible"],
-  ["03","Certificat d'existence C20 SPA"],
+  ["03","Certificat d'existence C20 SPA – Année 2026"],
   ["04","Numéro d'identification fiscale (NIF) SPA"],
   ["05","Numéro d'identification statistique (NIS) principal"],
   ["06","Contrat de location des locaux en cours de validité"],
@@ -535,7 +542,7 @@ const SECTIONS = [
   ["09","Autorisation d'exploitation des caméras de surveillance"],
   ["10","Livre légal (mise en demeure) disponible"],
   ["11","05 Livres légaux SPA légalisés et disponible (numérique)"],
-  ["12","Autorisation ARPCE"],
+  ["12","Autorisation ARPCE / cahier des charges"],
   ["13","Registre des doléances disponible et accessible"],
   ["14","Remise des clés de l'agence avec décharge"],
   ["15","Compteur électricité et abonnement internet (modem) au nom de GUEPEX SPA"],
@@ -749,7 +756,7 @@ function agencesForRegion(region){
 // ======================================================================
 let state = {
   header:{ agence:"", date:"", superficie:"", employes:"", livreurs:"", securite:"",
-    agentsCS:"", agentsPoly:"", colisExpedies:"", colisLivresCS:"", colisLivresLivreurs:"" },
+    agentsCS:"", agentsPoly:"", colisExpedies:"", colisLivresCS:"", colisLivresLivreurs:"", commentaireGeneral:"" },
   status:{},   // id -> "conforme" | "nonconforme" | "na" | ""
   anom:{}      // id -> texte
 };
@@ -793,6 +800,7 @@ async function persistNow(attempt){
       colis_expedies: state.header.colisExpedies || null,
       colis_livres_cs: state.header.colisLivresCS || null,
       colis_livres_livreurs: state.header.colisLivresLivreurs || null,
+      commentaire_general: state.header.commentaireGeneral || null,
       rpo_email: currentUser.email,
       rpo_nom: currentUserName || currentUser.email,
       statuts: state.status,
@@ -859,7 +867,8 @@ async function loadRecordById(id){
     header:{ agence:data.agence, date:data.date, superficie:data.superficie||"",
       employes:data.nb_employes||"", livreurs:data.nb_livreurs||"", securite:data.nb_agents_securite||"",
       agentsCS:data.agents_cs||"", agentsPoly:data.agents_polyvalents||"",
-      colisExpedies:data.colis_expedies||"", colisLivresCS:data.colis_livres_cs||"", colisLivresLivreurs:data.colis_livres_livreurs||"" },
+      colisExpedies:data.colis_expedies||"", colisLivresCS:data.colis_livres_cs||"", colisLivresLivreurs:data.colis_livres_livreurs||"",
+      commentaireGeneral:data.commentaire_general||"" },
     status: data.statuts || {},
     anom: data.anomalies || {}
   };
@@ -1157,6 +1166,7 @@ function buildPrintView(){
   document.getElementById("pvColisExpedies").textContent = state.header.colisExpedies || "-";
   document.getElementById("pvColisLivresCS").textContent = state.header.colisLivresCS || "-";
   document.getElementById("pvColisLivresLivreurs").textContent = state.header.colisLivresLivreurs || "-";
+  document.getElementById("pvCommentaireGeneral").textContent = state.header.commentaireGeneral || "-";
   const staffing = computeStaffingFromHeader(state.header);
   const staffingHTML = staffingBadgesHTML(staffing, false);
   document.getElementById("pvStaffing").innerHTML = staffingHTML
@@ -1275,6 +1285,91 @@ function applyDashFilters(){
 
 document.getElementById("dashSearch").addEventListener("input", applyDashFilters);
 document.getElementById("dashStatusFilter").addEventListener("change", applyDashFilters);
+
+// ======================================================================
+// EXPORT EXCEL DU TABLEAU DE BORD (Manager / RPO / DR / Admin)
+// ======================================================================
+function getVisibleRankingRows(){
+  const q = normalizeSearch(document.getElementById("dashSearch").value);
+  const statusFilter = document.getElementById("dashStatusFilter").value;
+  return lastRankingRows.filter(r=>{
+    const status = r.rec ? (r.rec.approved ? "approved" : (r.rec.closed ? "closed" : "pending")) : "none";
+    const matchesSearch = !q || normalizeSearch(r.name).includes(q);
+    const matchesStatus = !statusFilter || status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+}
+
+function getVisibleAnomalyGroups(){
+  const q = normalizeSearch(document.getElementById("dashSearch").value);
+  return lastAnomalyGroups.filter(g=> !q || normalizeSearch(g.agence).includes(q));
+}
+
+function staffingLabelPlainText(rec){
+  const staffing = computeStaffingFromHeader({
+    agentsPoly: rec.agents_polyvalents, agentsCS: rec.agents_cs, livreurs: rec.nb_livreurs,
+    colisExpedies: rec.colis_expedies, colisLivresCS: rec.colis_livres_cs, colisLivresLivreurs: rec.colis_livres_livreurs
+  });
+  const status = overallStaffingStatus(staffing);
+  return status ? staffingLabel(status) : "—";
+}
+
+function correctionStatusLabel(status){
+  return status === "done" ? "Terminée" : (status === "in_progress" ? "En cours" : "Non démarrée");
+}
+
+function exportExcel(){
+  if(typeof XLSX === "undefined"){
+    showToast("Le module Excel n'a pas pu se charger — vérifie ta connexion internet et réessaie.", 4500);
+    return;
+  }
+
+  const dateStr = new Date().toISOString().slice(0,10);
+  let wsData, sheetName, filenameBase;
+
+  if(currentRole === "directeur_regional"){
+    const groups = getVisibleAnomalyGroups();
+    wsData = [["Agence", "Dernière visite approuvée", "Nb points non conformes", "Statut correction", "Note", "Commentaire général"]];
+    groups.forEach(g=>{
+      const note = g.correctionStatus === "done" ? (g.correctionDoneNote||"") : (g.correctionStatus === "in_progress" ? (g.correctionStartedNote||"") : "");
+      wsData.push([g.agence, g.date, g.points.length, correctionStatusLabel(g.correctionStatus), note, g.commentaireGeneral || ""]);
+    });
+    sheetName = "Non conformités";
+    filenameBase = "GuepEX_NonConformites_Region-" + (currentUserRegion || "");
+  } else {
+    const rows = getVisibleRankingRows();
+    wsData = [["Rang", "Agence", "Dernière visite", "RPO", "Taux global (%)", "Appréciation", "Statut", "Diagnostic effectif", "Correction", "Commentaire général"]];
+    rows.forEach((r,i)=>{
+      if(!r.rec){
+        wsData.push([i+1, r.name, "", "", "", "", "Aucune visite", "", "", ""]);
+        return;
+      }
+      const statusLabel = r.rec.approved ? "Approuvé" : (r.rec.closed ? "Clôturée" : "En cours");
+      wsData.push([
+        i+1, r.name, r.rec.date || "", r.rec.rpo_nom || r.rec.rpo_email || "",
+        r.rec.taux != null ? Math.round(r.rec.taux*100) : "",
+        apprLabel(r.rec.taux), statusLabel, staffingLabelPlainText(r.rec),
+        correctionStatusLabel(r.rec.correction_status), r.rec.commentaire_general || ""
+      ]);
+    });
+    sheetName = "Tableau de bord";
+    filenameBase = (currentRole === "directeur_general") ? "GuepEX_TableauDeBord_DG"
+      : (currentRole === "admin") ? "GuepEX_TableauDeBord_Admin"
+      : (currentRole === "manager") ? "GuepEX_TableauDeBord_Manager"
+      : "GuepEX_TableauDeBord";
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws["!cols"] = wsData[0].map((_, colIdx)=>{
+    const maxLen = wsData.reduce((m,row)=> Math.max(m, String(row[colIdx] ?? "").length), 10);
+    return { wch: Math.min(maxLen + 2, 50) };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filenameBase + "_" + dateStr + ".xlsx");
+}
+
+document.getElementById("btnExportExcel").addEventListener("click", exportExcel);
 
 // ======================================================================
 // PANNEAU TOP 5 / FLOP 5
@@ -1514,6 +1609,7 @@ async function buildRegionAnomalies(){
       correctionStatus: rec.correction_status || null,
       correctionStartedNote: rec.correction_started_note || "",
       correctionDoneNote: rec.correction_done_note || "",
+      commentaireGeneral: rec.commentaire_general || "",
       previousUnfinished
     });
   });
@@ -2050,73 +2146,12 @@ function drawEvolutionSvg(visites){
 }
 
 // ======================================================================
-// EXPORT / IMPORT (sauvegarde manuelle, indépendante du stockage automatique)
-// ======================================================================
-async function exportAllData(){
-  let all = [];
-  try{ all = await getAllVisites(); }
-  catch(e){ showToast("Export impossible — vérifie ta connexion internet.", 5000); return; }
-
-  const backup = { exportedAt: new Date().toISOString(), visites: all };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "guepex-checklist-sauvegarde-"+new Date().toISOString().slice(0,10)+".json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  showToast("Sauvegarde exportée.");
-}
-
-async function importAllData(file){
-  try{
-    const text = await file.text();
-    const backup = JSON.parse(text);
-    const list = backup && (backup.visites || backup.index); // compat anciens exports
-    if(!list) throw new Error("Fichier de sauvegarde invalide");
-
-    let okCount = 0, failCount = 0;
-    for(const rec of list){
-      try{
-        const payload = {
-          user_id: currentUser.id,
-          agence: rec.agence,
-          date: rec.date,
-          superficie: rec.superficie || null,
-          nb_employes: rec.nb_employes || null,
-          nb_livreurs: rec.nb_livreurs || null,
-          nb_agents_securite: rec.nb_agents_securite || null,
-          agents_cs: rec.agents_cs || null,
-          agents_polyvalents: rec.agents_polyvalents || null,
-          colis_expedies: rec.colis_expedies || null,
-          colis_livres_cs: rec.colis_livres_cs || null,
-          colis_livres_livreurs: rec.colis_livres_livreurs || null,
-          statuts: rec.statuts || (backup.records && backup.records[rec.id] && backup.records[rec.id].status) || {},
-          anomalies: rec.anomalies || (backup.records && backup.records[rec.id] && backup.records[rec.id].anom) || {},
-          taux: rec.taux ?? null,
-          appreciation: rec.appreciation || null
-        };
-        const { error } = await sb.from("visites").upsert(payload, { onConflict: "user_id,agence,date" });
-        if(error) throw error;
-        okCount++;
-      }catch(e){ failCount++; }
-    }
-    showToast(`Import terminé : ${okCount} visite(s) restaurée(s)`+(failCount>0?`, ${failCount} échec(s)`:"")+".");
-    buildDashboard();
-  }catch(e){
-    console.warn("Import impossible :", e);
-    showToast("Le fichier importé n'a pas pu être lu — vérifie qu'il s'agit bien d'un export généré par cette application.", 6000);
-  }
-}
-
-// ======================================================================
 // INIT
 // ======================================================================
 function bindHeader(){
   const map = {fAgence:"agence", fDate:"date", fSuperficie:"superficie", fEmployes:"employes", fLivreurs:"livreurs", fSecurite:"securite",
-    fAgentsCS:"agentsCS", fAgentsPoly:"agentsPoly", fColisExpedies:"colisExpedies", fColisLivresCS:"colisLivresCS", fColisLivresLivreurs:"colisLivresLivreurs"};
+    fAgentsCS:"agentsCS", fAgentsPoly:"agentsPoly", fColisExpedies:"colisExpedies", fColisLivresCS:"colisLivresCS", fColisLivresLivreurs:"colisLivresLivreurs",
+    fCommentaireGeneral:"commentaireGeneral"};
   Object.entries(map).forEach(([elId,key])=>{
     const el = document.getElementById(elId);
     el.value = state.header[key] || "";
@@ -2149,7 +2184,7 @@ document.getElementById("btnNew").addEventListener("click", async ()=>{
   const ok = await askConfirm("Démarrer une nouvelle visite ? La saisie actuellement à l'écran sera remplacée (elle reste enregistrée sous l'agence/date précédentes si elles étaient renseignées).");
   if(!ok) return;
   state = { header:{agence:"",date:"",superficie:"",employes:"",livreurs:"",securite:"",
-    agentsCS:"",agentsPoly:"",colisExpedies:"",colisLivresCS:"",colisLivresLivreurs:""}, status:{}, anom:{} };
+    agentsCS:"",agentsPoly:"",colisExpedies:"",colisLivresCS:"",colisLivresLivreurs:"",commentaireGeneral:""}, status:{}, anom:{} };
   currentRecordId = null;
   bindHeader();
   buildSections();
@@ -2177,12 +2212,6 @@ document.getElementById("btnPrint").addEventListener("click", ()=>{
 
 document.getElementById("tabInspection").addEventListener("click", ()=> switchView("inspection"));
 document.getElementById("tabDashboard").addEventListener("click", ()=> switchView("dashboard"));
-document.getElementById("btnExport").addEventListener("click", exportAllData);
-document.getElementById("fileImport").addEventListener("change", (e)=>{
-  const f = e.target.files[0];
-  if(f) importAllData(f);
-  e.target.value = "";
-});
 
 // ======================================================================
 // AUTHENTIFICATION & RÔLES
@@ -2204,7 +2233,6 @@ function applyRoleUI(){
     label.textContent = displayName + " · RPO";
   }
 
-  const importLabel = document.getElementById("fileImport")?.closest("label");
   const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general");
 
   if(isReadOnlyRole){
@@ -2213,7 +2241,6 @@ function applyRoleUI(){
     document.getElementById("btnExpandAll").style.display = "none";
     document.getElementById("btnPrint").style.display = "none";
     document.getElementById("btnClose").style.display = "none";
-    if(importLabel) importLabel.style.display = "none";
     switchView("dashboard");
   } else if(currentRole === "admin"){
     // accès complet : garde tout visible (onglet Visite + Tableau de bord, tous les boutons), démarre sur le tableau de bord
@@ -2222,7 +2249,6 @@ function applyRoleUI(){
     document.getElementById("btnExpandAll").style.display = "";
     document.getElementById("btnPrint").style.display = "";
     document.getElementById("btnClose").style.display = "";
-    if(importLabel) importLabel.style.display = "";
     switchView("dashboard");
   } else {
     switchView("inspection");
