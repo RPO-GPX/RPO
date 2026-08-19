@@ -360,7 +360,7 @@
   <div class="header-card" style="margin-top:12px;">
     <div class="field" style="flex:1 1 100%;">
       <label>Commentaire général de la visite (optionnel)</label>
-      <textarea id="fCommentaireGeneral" rows="4" placeholder="Remarques générales, contexte, points à suivre…" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+      <textarea id="fCommentaireGeneral" rows="8" placeholder="Remarques générales, contexte, points à suivre…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;min-height:140px;"></textarea>
     </div>
   </div>
 
@@ -1911,6 +1911,7 @@ async function openHistory(agenceName, anchorRow){
         &nbsp;·&nbsp; Agents sécurité : <b>${r.nb_agents_securite||"—"}</b>
       </div>
       ${staffingHTML ? `<div style="margin-top:2px;">${staffingHTML}</div>` : ""}
+      ${r.commentaire_general ? `<div style="margin-top:4px;padding:8px 10px;background:#f6f4ee;border-radius:6px;font-size:12px;color:var(--text);white-space:pre-wrap;"><b style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px;">Commentaire général</b>${escapeHtml(r.commentaire_general)}</div>` : ""}
     `;
 
     const loadBtn = row.querySelector("[data-id]");
