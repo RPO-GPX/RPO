@@ -355,12 +355,20 @@
   </div>
   <div style="max-width:1040px;margin:10px auto 0;padding:0 22px;" id="staffingLive"></div>
 
-  <div class="wrap" id="sections"></div>
+  <div class="wrap" id="sections" style="margin-bottom:0;"></div>
 
-  <div class="header-card" style="margin-top:12px;">
-    <div class="field" style="flex:1 1 100%;">
-      <label>Commentaire général de la visite (optionnel)</label>
-      <textarea id="fCommentaireGeneral" rows="8" placeholder="Remarques générales, contexte, points à suivre…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;min-height:140px;"></textarea>
+  <div class="wrap" style="margin-top:0;padding-top:0;">
+    <div class="section" id="commentSection">
+      <div class="section-head" id="commentSectionHead">
+        <span class="name">Commentaire général de la visite</span>
+        <span class="meta">
+          <span style="font-size:11px;opacity:.75;">Optionnel</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="section-body" style="padding:14px 18px;">
+        <textarea id="fCommentaireGeneral" rows="8" placeholder="Remarques générales, contexte, points à suivre…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;min-height:140px;"></textarea>
+      </div>
     </div>
   </div>
 
@@ -509,9 +517,6 @@
     </tr></thead>
     <tbody></tbody>
   </table>
-
-  <div class="pv-sub">Commentaire général de la visite</div>
-  <div id="pvCommentaireGeneral" style="padding:8px 2px;font-size:12.5px;white-space:pre-wrap;min-height:18px;">-</div>
 
   <div class="pv-sig">
     <div class="block">
@@ -1166,7 +1171,6 @@ function buildPrintView(){
   document.getElementById("pvColisExpedies").textContent = state.header.colisExpedies || "-";
   document.getElementById("pvColisLivresCS").textContent = state.header.colisLivresCS || "-";
   document.getElementById("pvColisLivresLivreurs").textContent = state.header.colisLivresLivreurs || "-";
-  document.getElementById("pvCommentaireGeneral").textContent = state.header.commentaireGeneral || "-";
   const staffing = computeStaffingFromHeader(state.header);
   const staffingHTML = staffingBadgesHTML(staffing, false);
   document.getElementById("pvStaffing").innerHTML = staffingHTML
@@ -1676,6 +1680,13 @@ function openAgencyAnomalies(group, anchorRow){
     `;
     td.appendChild(row);
   });
+
+  if(group.commentaireGeneral){
+    const commentBox = document.createElement("div");
+    commentBox.style.cssText = "margin-top:6px;padding:8px 10px;background:#f6f4ee;border-radius:6px;font-size:12px;color:var(--text);white-space:pre-wrap;";
+    commentBox.innerHTML = `<b style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px;">Commentaire général</b>${escapeHtml(group.commentaireGeneral)}`;
+    td.appendChild(commentBox);
+  }
 
   expandRow.appendChild(td);
   anchorRow.after(expandRow);
@@ -2212,6 +2223,7 @@ document.getElementById("btnPrint").addEventListener("click", ()=>{
 });
 
 document.getElementById("tabInspection").addEventListener("click", ()=> switchView("inspection"));
+document.getElementById("commentSectionHead").addEventListener("click", ()=> document.getElementById("commentSection").classList.toggle("collapsed"));
 document.getElementById("tabDashboard").addEventListener("click", ()=> switchView("dashboard"));
 
 // ======================================================================
