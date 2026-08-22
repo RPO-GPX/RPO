@@ -73,6 +73,10 @@
   .btn.primary{ background:var(--red); border-color:var(--red); }
   .btn.primary:hover{ background:var(--red-dark); }
   .btn.ghost{ background:transparent; }
+  .btn.light{
+    background:#fff; border:1px solid var(--line); color:var(--navy);
+  }
+  .btn.light:hover{ background:#f2f2f0; }
 
   /* ---------- header form ---------- */
   .header-card{
@@ -170,6 +174,10 @@
     font-size:12.5px; padding:8px 14px; cursor:pointer; border-bottom:2px solid transparent;
   }
   .subtab.active{ color:var(--navy); border-bottom-color:var(--red); }
+  .stat-box{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; text-align:center;
+  }
   .view{ display:none; }
   .view.active{ display:block; }
 
@@ -514,11 +522,12 @@
 <div class="view" id="viewAdmin">
   <div class="dash-wrap">
     <div class="dash-toolbar">
-      <h2 style="margin:0;font-size:18px;">Administration</h2>
-      <div class="tabs" style="gap:2px;">
+      <h2 style="margin:0;font-size:18px;" id="adminTitle">Administration</h2>
+      <div class="tabs" style="gap:2px;" id="adminSubTabsBar">
         <button class="subtab active" id="adminSubUsers" style="font-size:12.5px;padding:8px 14px;">Comptes utilisateurs</button>
         <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
         <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Pondération des sections</button>
+        <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
       </div>
     </div>
 
@@ -539,7 +548,7 @@
     <div id="adminPaneLog" style="display:none;">
       <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
         <input type="text" id="adminLogSearch" placeholder="🔍 Rechercher (utilisateur, action, agence…)" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
-        <button class="btn ghost" id="btnRefreshLog" style="padding:8px 14px;border-radius:8px;">↻ Actualiser</button>
+        <button class="btn light" id="btnRefreshLog" style="padding:8px 14px;border-radius:8px;">↻ Actualiser</button>
         <span id="adminLogStatus" style="font-size:11.5px;color:var(--muted);"></span>
       </div>
       <table class="dash" id="adminLogTable">
@@ -561,6 +570,55 @@
       <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
         <button class="btn primary" id="btnSaveWeights" style="padding:9px 16px;border-radius:8px;">Enregistrer la pondération</button>
         <span id="adminWeightsStatus" style="font-size:12.5px;"></span>
+      </div>
+    </div>
+
+    <!-- ---- Rapport mensuel ---- -->
+    <div id="adminPaneReport" style="display:none;">
+      <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        <input type="month" id="reportMonth" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
+        <button class="btn primary" id="btnGenerateReport" style="padding:8px 16px;border-radius:8px;">Générer le rapport</button>
+        <button class="btn light" id="btnExportReportExcel" style="padding:8px 14px;border-radius:8px;">⬇ Export Excel</button>
+        <span id="adminReportStatus" style="font-size:11.5px;color:var(--muted);"></span>
+      </div>
+
+      <div id="reportSummary" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;">
+        <div class="stat-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Couverture</div>
+          <div id="repCoverage" style="font-size:22px;font-weight:800;color:var(--navy);margin-top:4px;">–</div>
+        </div>
+        <div class="stat-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Taux moyen réseau</div>
+          <div id="repAvgTaux" style="font-size:22px;font-weight:800;color:var(--red);margin-top:4px;">–</div>
+        </div>
+        <div class="stat-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Meilleure agence</div>
+          <div id="repBestAgence" style="font-size:13.5px;font-weight:700;color:var(--navy);margin-top:6px;line-height:1.4;">–</div>
+        </div>
+        <div class="stat-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Agence à améliorer</div>
+          <div id="repWorstAgence" style="font-size:13.5px;font-weight:700;color:var(--navy);margin-top:6px;line-height:1.4;">–</div>
+        </div>
+      </div>
+
+      <div id="reportTables" style="display:none;">
+        <h3 style="font-size:13.5px;margin:0 0 8px;">Classement des agences visitées</h3>
+        <table class="dash" id="reportRankingTable">
+          <thead><tr><th>Rang</th><th>Agence</th><th>Date visite</th><th>Taux</th><th>Appréciation</th></tr></thead>
+          <tbody id="reportRankingBody"></tbody>
+        </table>
+
+        <h3 style="font-size:13.5px;margin:22px 0 8px;">Moyenne par section</h3>
+        <table class="dash" id="reportSectionsTable" style="max-width:520px;">
+          <thead><tr><th>Section</th><th>Taux moyen</th></tr></thead>
+          <tbody id="reportSectionsBody"></tbody>
+        </table>
+
+        <h3 style="font-size:13.5px;margin:22px 0 8px;">Points de non-conformité les plus récurrents</h3>
+        <table class="dash" id="reportPointsTable">
+          <thead><tr><th>Rang</th><th>Section</th><th>Point de contrôle</th><th>Nb agences</th><th>% couverture</th></tr></thead>
+          <tbody id="reportPointsBody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -2196,7 +2254,10 @@ function switchView(name){
   if(name==="dashboard") buildDashboard();
   if(name==="evolution") initEvolutionView();
   if(name==="analyse") buildAnalyse();
-  if(name==="admin") buildAdminUsers();
+  if(name==="admin"){
+    if(currentRole === "manager") adminSwitchSub("report");
+    else buildAdminUsers();
+  }
 }
 
 document.getElementById("tabEvolution").addEventListener("click", ()=> switchView("evolution"));
@@ -2210,16 +2271,20 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneUsers").style.display = (name==="users") ? "" : "none";
   document.getElementById("adminPaneLog").style.display = (name==="log") ? "" : "none";
   document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
+  document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
   document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
+  document.getElementById("adminSubReport").classList.toggle("active", name==="report");
   if(name==="users") buildAdminUsers();
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
+  if(name==="report") initReportPane();
 }
 document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
 document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
+document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
 
 const ROLE_LABELS = {
   inspecteur:"Inspecteur (RPO)", manager:"Manager",
@@ -2434,6 +2499,192 @@ document.getElementById("btnSaveWeights").addEventListener("click", async ()=>{
     statusEl.textContent = "Échec : " + e.message;
     statusEl.style.color = "#a11313";
   }
+});
+
+// ======================================================================
+// RAPPORT MENSUEL CONSOLIDÉ (Admin uniquement)
+// ======================================================================
+const MOIS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+function formatMonthLabel(monthInput){
+  const [y,m] = monthInput.split("-");
+  return MOIS_FR[parseInt(m,10)-1] + " " + y;
+}
+function sectionTauxFromStatuts(sec, statuts){
+  let conforme=0, nonconforme=0;
+  sec.items.forEach(([n])=>{
+    if(n==="__sub__") return;
+    const v = statuts[itemId(sec.key, n)] || "";
+    if(v==="conforme") conforme++;
+    else if(v==="nonconforme") nonconforme++;
+  });
+  const denom = conforme + (2*nonconforme);
+  return denom>0 ? conforme/denom : null;
+}
+
+let lastMonthlyReport = null;
+let reportPaneInitDone = false;
+function initReportPane(){
+  if(!reportPaneInitDone){
+    const now = new Date();
+    document.getElementById("reportMonth").value = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
+    reportPaneInitDone = true;
+  }
+}
+
+async function buildMonthlyReport(){
+  const monthInput = document.getElementById("reportMonth").value;
+  const status = document.getElementById("adminReportStatus");
+  if(!monthInput){ status.textContent = "Choisis un mois."; return; }
+  status.textContent = "Génération en cours…";
+  document.getElementById("reportSummary").style.display = "none";
+  document.getElementById("reportTables").style.display = "none";
+
+  let all = [];
+  try{ all = await getAllVisites(); }
+  catch(e){ status.textContent = "Impossible de charger les données — vérifie ta connexion internet."; return; }
+
+  const finalized = all.filter(r=> (r.closed || r.approved) && (r.date||"").startsWith(monthInput));
+
+  // une seule ligne par agence : la visite la plus récente du mois
+  const byAgence = {};
+  finalized.forEach(r=>{
+    const key = (r.agence||"").trim().toLowerCase();
+    if(!byAgence[key] || (r.date||"") > (byAgence[key].date||"")) byAgence[key] = r;
+  });
+  const visited = Object.values(byAgence);
+  const totalAgences = AGENCES.length;
+
+  const withTaux = visited.filter(r=> r.taux != null);
+  const avgTaux = withTaux.length ? withTaux.reduce((s,r)=> s+r.taux, 0) / withTaux.length : null;
+  const ranking = [...withTaux].sort((a,b)=> b.taux - a.taux);
+
+  const sectionAgg = {};
+  visited.forEach(r=>{
+    const statuts = r.statuts || {};
+    SECTIONS.forEach(sec=>{
+      const t = sectionTauxFromStatuts(sec, statuts);
+      if(t==null) return;
+      if(!sectionAgg[sec.key]) sectionAgg[sec.key] = { name: sec.name, sum:0, n:0 };
+      sectionAgg[sec.key].sum += t;
+      sectionAgg[sec.key].n += 1;
+    });
+  });
+  const sectionRows = Object.values(sectionAgg).map(v=> ({ name:v.name, avg: v.sum/v.n })).sort((a,b)=> a.avg-b.avg);
+
+  const pointsAgg = {};
+  visited.forEach(r=>{
+    const statuts = r.statuts || {};
+    Object.keys(statuts).forEach(id=>{
+      if(statuts[id] !== "nonconforme") return;
+      const info = ITEM_INFO[id];
+      if(!info) return;
+      if(!pointsAgg[id]) pointsAgg[id] = { section:info.section, label:info.label, agences:new Set() };
+      pointsAgg[id].agences.add(r.agence);
+    });
+  });
+  const pointsRows = Object.values(pointsAgg)
+    .map(v=> ({ section:v.section, label:v.label, count:v.agences.size, pct: visited.length>0 ? Math.round(v.agences.size/visited.length*100) : 0 }))
+    .sort((a,b)=> b.count-a.count)
+    .slice(0,15);
+
+  lastMonthlyReport = { monthInput, totalAgences, visitedCount:visited.length, avgTaux, ranking, sectionRows, pointsRows };
+  renderMonthlyReport();
+  status.textContent = "Rapport généré pour " + formatMonthLabel(monthInput) + ".";
+  logActivity("Génération rapport mensuel", formatMonthLabel(monthInput), visited.length + " agence(s) couverte(s)");
+}
+
+function renderMonthlyReport(){
+  const r = lastMonthlyReport;
+  if(!r) return;
+  document.getElementById("reportSummary").style.display = "grid";
+  document.getElementById("reportTables").style.display = "block";
+
+  document.getElementById("repCoverage").textContent = r.visitedCount + " / " + r.totalAgences;
+  document.getElementById("repAvgTaux").textContent = r.avgTaux==null ? "–" : Math.round(r.avgTaux*100)+"%";
+
+  const best = r.ranking[0];
+  const worst = r.ranking[r.ranking.length-1];
+  document.getElementById("repBestAgence").innerHTML = best ? (escapeHtml(best.agence) + `<br><span class="taux-tag" style="${tierTagStyle(best.taux)}">${Math.round(best.taux*100)}%</span>`) : "–";
+  document.getElementById("repWorstAgence").innerHTML = (worst && r.ranking.length>1) ? (escapeHtml(worst.agence) + `<br><span class="taux-tag" style="${tierTagStyle(worst.taux)}">${Math.round(worst.taux*100)}%</span>`) : "–";
+
+  const rankBody = document.getElementById("reportRankingBody");
+  rankBody.innerHTML = "";
+  r.ranking.forEach((rec,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="rank-badge">#${i+1}</td>
+      <td>${escapeHtml(rec.agence)}</td>
+      <td>${rec.date || "-"}</td>
+      <td><span class="taux-tag" style="${tierTagStyle(rec.taux)}">${Math.round(rec.taux*100)}%</span></td>
+      <td>${apprLabel(rec.taux)}</td>`;
+    rankBody.appendChild(tr);
+  });
+
+  const secBody = document.getElementById("reportSectionsBody");
+  secBody.innerHTML = "";
+  r.sectionRows.forEach(s=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(s.name)}</td><td><span class="taux-tag" style="${tierTagStyle(s.avg)}">${Math.round(s.avg*100)}%</span></td>`;
+    secBody.appendChild(tr);
+  });
+
+  const ptsBody = document.getElementById("reportPointsBody");
+  ptsBody.innerHTML = "";
+  if(r.pointsRows.length === 0){
+    ptsBody.innerHTML = `<tr><td colspan="5" class="agence-empty">Aucun point non conforme relevé ce mois-ci.</td></tr>`;
+  } else {
+    r.pointsRows.forEach((p,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="rank-badge">#${i+1}</td>
+        <td style="font-size:11.5px;color:var(--muted);">${escapeHtml(p.section)}</td>
+        <td>${escapeHtml(p.label)}</td>
+        <td style="text-align:center;font-weight:700;">${p.count}</td>
+        <td><span class="taux-tag" style="background:#fde2e2;color:#a11313;">${p.pct}%</span></td>`;
+      ptsBody.appendChild(tr);
+    });
+  }
+}
+
+document.getElementById("btnGenerateReport").addEventListener("click", buildMonthlyReport);
+
+document.getElementById("btnExportReportExcel").addEventListener("click", ()=>{
+  const r = lastMonthlyReport;
+  if(!r){ showToast("Génère d'abord le rapport avant d'exporter.", 3500); return; }
+  if(typeof XLSX === "undefined"){
+    showToast("Export indisponible — bibliothèque Excel non chargée.", 4000);
+    return;
+  }
+  const monthLabel = formatMonthLabel(r.monthInput);
+
+  const wsSummary = XLSX.utils.aoa_to_sheet([
+    ["Rapport mensuel consolidé — " + monthLabel],
+    [],
+    ["Agences visitées", r.visitedCount + " / " + r.totalAgences],
+    ["Taux moyen réseau", r.avgTaux==null ? "n/a" : Math.round(r.avgTaux*100)+"%"],
+    ["Meilleure agence", r.ranking[0] ? r.ranking[0].agence + " (" + Math.round(r.ranking[0].taux*100) + "%)" : "-"],
+    ["Agence à améliorer", r.ranking.length>1 ? r.ranking[r.ranking.length-1].agence + " (" + Math.round(r.ranking[r.ranking.length-1].taux*100) + "%)" : "-"]
+  ]);
+
+  const rankData = [["Rang","Agence","Date visite","Taux","Appréciation"]];
+  r.ranking.forEach((rec,i)=> rankData.push([i+1, rec.agence, rec.date||"-", Math.round(rec.taux*100)+"%", apprLabel(rec.taux)]));
+  const wsRanking = XLSX.utils.aoa_to_sheet(rankData);
+
+  const secData = [["Section","Taux moyen"]];
+  r.sectionRows.forEach(s=> secData.push([s.name, Math.round(s.avg*100)+"%"]));
+  const wsSections = XLSX.utils.aoa_to_sheet(secData);
+
+  const ptsData = [["Rang","Section","Point de contrôle","Nb agences","% couverture"]];
+  r.pointsRows.forEach((p,i)=> ptsData.push([i+1, p.section, p.label, p.count, p.pct+"%"]));
+  const wsPoints = XLSX.utils.aoa_to_sheet(ptsData);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Résumé Exécutif");
+  XLSX.utils.book_append_sheet(wb, wsRanking, "Classement Agences");
+  XLSX.utils.book_append_sheet(wb, wsSections, "Moyenne Sections");
+  XLSX.utils.book_append_sheet(wb, wsPoints, "Points Récurrents");
+  XLSX.writeFile(wb, "GuepEX_Rapport_" + r.monthInput + ".xlsx");
+  logActivity("Export Excel rapport mensuel", monthLabel, null);
 });
 
 // ======================================================================
@@ -2842,7 +3093,11 @@ function applyRoleUI(){
 
   const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general");
 
-  document.getElementById("tabAdmin").style.display = (currentRole === "admin") ? "" : "none";
+  const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager");
+  document.getElementById("tabAdmin").style.display = canSeeAdminTab ? "" : "none";
+  document.getElementById("tabAdmin").textContent = (currentRole === "manager") ? "Rapport mensuel" : "Administration";
+  document.getElementById("adminTitle").textContent = (currentRole === "manager") ? "Rapport mensuel" : "Administration";
+  document.getElementById("adminSubTabsBar").style.display = (currentRole === "manager") ? "none" : "";
 
   if(isReadOnlyRole){
     document.getElementById("tabInspection").style.display = "none";
