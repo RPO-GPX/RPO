@@ -165,6 +165,11 @@
     font-size:13px; padding:8px 4px; cursor:pointer; border-bottom:2px solid transparent;
   }
   .tab.active{ color:#fff; border-bottom-color:var(--red); }
+  .subtab{
+    background:transparent; border:none; color:var(--muted); font-weight:700;
+    font-size:12.5px; padding:8px 14px; cursor:pointer; border-bottom:2px solid transparent;
+  }
+  .subtab.active{ color:var(--navy); border-bottom-color:var(--red); }
   .view{ display:none; }
   .view.active{ display:block; }
 
@@ -331,6 +336,7 @@
       <button class="tab" id="tabDashboard">Tableau de bord</button>
       <button class="tab" id="tabEvolution">Évolution agence</button>
       <button class="tab" id="tabAnalyse">Analyse</button>
+      <button class="tab" id="tabAdmin" style="display:none;">Administration</button>
     </div>
     <div class="sep"></div>
     <div class="topbar-ctx" id="ctxInspection">
@@ -502,6 +508,95 @@
       <thead><tr><th>Rang</th><th>Section</th><th>Point de contrôle</th><th>Nb agences concernées</th><th>% réseau</th></tr></thead>
       <tbody id="analyseBody"></tbody>
     </table>
+  </div>
+</div>
+
+<div class="view" id="viewAdmin">
+  <div class="dash-wrap">
+    <div class="dash-toolbar">
+      <h2 style="margin:0;font-size:18px;">Administration</h2>
+      <div class="tabs" style="gap:2px;">
+        <button class="subtab active" id="adminSubUsers" style="font-size:12.5px;padding:8px 14px;">Comptes utilisateurs</button>
+        <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
+        <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Pondération des sections</button>
+      </div>
+    </div>
+
+    <!-- ---- Comptes utilisateurs ---- -->
+    <div id="adminPaneUsers">
+      <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="text" id="adminUsersSearch" placeholder="🔍 Rechercher un utilisateur…" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
+        <button class="btn primary" id="btnNewUser" style="padding:8px 14px;border-radius:8px;">+ Nouveau compte</button>
+        <span id="adminUsersStatus" style="font-size:11.5px;color:var(--muted);"></span>
+      </div>
+      <table class="dash" id="adminUsersTable">
+        <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Région</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody id="adminUsersBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ---- Journal d'activité ---- -->
+    <div id="adminPaneLog" style="display:none;">
+      <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="text" id="adminLogSearch" placeholder="🔍 Rechercher (utilisateur, action, agence…)" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
+        <button class="btn ghost" id="btnRefreshLog" style="padding:8px 14px;border-radius:8px;">↻ Actualiser</button>
+        <span id="adminLogStatus" style="font-size:11.5px;color:var(--muted);"></span>
+      </div>
+      <table class="dash" id="adminLogTable">
+        <thead><tr><th>Date/heure</th><th>Utilisateur</th><th>Rôle</th><th>Action</th><th>Cible</th><th>Détails</th></tr></thead>
+        <tbody id="adminLogBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ---- Pondération des sections ---- -->
+    <div id="adminPaneWeights" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 16px;">
+        La somme des poids doit être égale à 100%. Ce changement s'applique aux nouvelles visites
+        (les visites déjà enregistrées gardent le taux calculé au moment de leur clôture).
+      </p>
+      <table class="dash" id="adminWeightsTable" style="max-width:520px;">
+        <thead><tr><th>Section</th><th>Poids (%)</th></tr></thead>
+        <tbody id="adminWeightsBody"></tbody>
+      </table>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
+        <button class="btn primary" id="btnSaveWeights" style="padding:9px 16px;border-radius:8px;">Enregistrer la pondération</button>
+        <span id="adminWeightsStatus" style="font-size:12.5px;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ---- Modale création / édition de compte ---- -->
+<div class="modal-overlay" id="userModalOverlay">
+  <div class="modal-box" style="max-width:420px;">
+    <h3 id="userModalTitle" style="margin:0 0 14px;font-size:16px;">Nouveau compte</h3>
+    <div class="login-field"><label>Nom complet</label><input type="text" id="userFormName"></div>
+    <div class="login-field"><label>Email</label><input type="email" id="userFormEmail"></div>
+    <div class="login-field" id="userFormPasswordField"><label>Mot de passe</label><input type="password" id="userFormPassword" placeholder="Min. 6 caractères"></div>
+    <div class="login-field">
+      <label>Rôle</label>
+      <select id="userFormRole" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <option value="inspecteur">Inspecteur (RPO)</option>
+        <option value="manager">Manager</option>
+        <option value="directeur_regional">Directeur régional</option>
+        <option value="directeur_general">Directeur général</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="login-field" id="userFormRegionField" style="display:none;">
+      <label>Région</label>
+      <select id="userFormRegion" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <option value="Est">Est</option>
+        <option value="Ouest">Ouest</option>
+        <option value="Centre">Centre</option>
+        <option value="Sud">Sud</option>
+      </select>
+    </div>
+    <p id="userFormError" style="display:none;color:#a11313;font-size:12.5px;margin:4px 0 10px;"></p>
+    <div class="modal-actions">
+      <button id="userFormCancel">Annuler</button>
+      <button class="confirm" id="userFormSave">Enregistrer</button>
+    </div>
   </div>
 </div>
 
@@ -775,6 +870,52 @@ let lastRankingRows = []; // dernières lignes du tableau de bord Manager/DG (po
 let lastAnomalyGroups = []; // dernier regroupement par agence de la vue DR (pour le panneau Top 5 / Flop 5)
 let correctionEnabled = true; // interrupteur global : le DR peut-il démarrer/terminer une correction ?
 let realtimeChannel = null;
+const EDGE_FUNCTION_URL = SUPABASE_URL + "/functions/v1/admin-users";
+// ======================================================================
+// JOURNAL D'ACTIVITÉ
+// ======================================================================
+async function logActivity(action, target, details){
+  try{
+    await sb.from("activity_log").insert({
+      actor_id: currentUser ? currentUser.id : null,
+      actor_name: currentUserName || (currentUser ? currentUser.email : null),
+      actor_role: currentRole,
+      action, target: target || null, details: details || null
+    });
+  }catch(e){ console.warn("Log d'activité impossible :", e); }
+}
+
+// ======================================================================
+// PONDÉRATION DES SECTIONS (modifiable par l'Admin)
+// ======================================================================
+async function loadSectionWeights(){
+  try{
+    const { data, error } = await sb.from("section_weights").select("section_key, weight");
+    if(error || !data) return;
+    const bySection = {};
+    data.forEach(row=> bySection[row.section_key] = Number(row.weight));
+    SECTIONS.forEach(sec=>{
+      if(bySection[sec.key] !== undefined) sec.weight = bySection[sec.key];
+    });
+  }catch(e){ console.warn("Pondération : chargement impossible, valeurs par défaut conservées.", e); }
+}
+
+// Appelle la fonction Edge "admin-users" (créations/modifications de comptes,
+// qui nécessitent la clé service_role côté serveur — jamais exposée au client).
+async function callAdminUsersFn(payload){
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(EDGE_FUNCTION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + (session ? session.access_token : "")
+    },
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if(!res.ok) throw new Error(json.error || "Erreur inconnue.");
+  return json;
+}
 // ======================================================================
 const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
 
@@ -1858,6 +1999,7 @@ async function updateCorrectionStatus(g, status, cell, note){
     if(status === "done") g.correctionDoneNote = note || "";
     renderCorrectionCell(cell, g);
     showToast(status === "in_progress" ? "Correction marquée comme démarrée." : "Correction marquée comme terminée.", 3000);
+    logActivity(status === "in_progress" ? "Correction démarrée" : "Correction terminée", g.agence, note || null);
   }catch(e){
     console.warn("Mise à jour du statut de correction impossible :", e);
     showToast("Impossible d'enregistrer — vérifie ta connexion internet.", 4000);
@@ -1982,6 +2124,7 @@ async function openHistory(agenceName, anchorRow){
           await deleteRecordById(r.id);
           if(currentRecordId === r.id) currentRecordId = null;
           showToast("Visite supprimée.");
+          logActivity("Suppression visite", agenceName, "Date visite : " + (r.date||"-"));
           await refresh();
         }catch(e){ showToast("Suppression impossible — réessaie.", 5000); }
       });
@@ -1994,6 +2137,7 @@ async function openHistory(agenceName, anchorRow){
         try{
           await approveRecordById(r.id);
           showToast("Visite approuvée.");
+          logActivity("Approbation visite", agenceName, "Date visite : " + (r.date||"-"));
           await refresh();
         }catch(e){ showToast("Approbation impossible — réessaie.", 4000); }
       });
@@ -2006,6 +2150,7 @@ async function openHistory(agenceName, anchorRow){
         try{
           await revokeApprovalById(r.id);
           showToast("Approbation annulée.");
+          logActivity("Annulation approbation", agenceName, "Date visite : " + (r.date||"-"));
           await refresh();
         }catch(e){ showToast("Annulation impossible — réessaie.", 4000); }
       });
@@ -2016,6 +2161,7 @@ async function openHistory(agenceName, anchorRow){
         try{
           await reopenRecordById(r.id);
           showToast("Visite rouverte.");
+          logActivity("Réouverture visite", agenceName, "Date visite : " + (r.date||"-"));
           await refresh();
         }catch(e){ showToast("Réouverture impossible — réessaie.", 4000); }
       });
@@ -2039,19 +2185,256 @@ function switchView(name){
   document.getElementById("viewDashboard").classList.toggle("active", name==="dashboard");
   document.getElementById("viewEvolution").classList.toggle("active", name==="evolution");
   document.getElementById("viewAnalyse").classList.toggle("active", name==="analyse");
+  document.getElementById("viewAdmin").classList.toggle("active", name==="admin");
   document.getElementById("tabInspection").classList.toggle("active", name==="inspection");
   document.getElementById("tabDashboard").classList.toggle("active", name==="dashboard");
   document.getElementById("tabEvolution").classList.toggle("active", name==="evolution");
   document.getElementById("tabAnalyse").classList.toggle("active", name==="analyse");
+  document.getElementById("tabAdmin").classList.toggle("active", name==="admin");
   document.getElementById("ctxInspection").style.display = (name==="inspection") ? "flex" : "none";
   document.getElementById("ctxDashboard").style.display = (name==="dashboard") ? "flex" : "none";
   if(name==="dashboard") buildDashboard();
   if(name==="evolution") initEvolutionView();
   if(name==="analyse") buildAnalyse();
+  if(name==="admin") buildAdminUsers();
 }
 
 document.getElementById("tabEvolution").addEventListener("click", ()=> switchView("evolution"));
 document.getElementById("tabAnalyse").addEventListener("click", ()=> switchView("analyse"));
+document.getElementById("tabAdmin").addEventListener("click", ()=> switchView("admin"));
+
+// ======================================================================
+// ADMINISTRATION (Admin uniquement) — comptes, journal, pondération
+// ======================================================================
+function adminSwitchSub(name){
+  document.getElementById("adminPaneUsers").style.display = (name==="users") ? "" : "none";
+  document.getElementById("adminPaneLog").style.display = (name==="log") ? "" : "none";
+  document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
+  document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
+  document.getElementById("adminSubLog").classList.toggle("active", name==="log");
+  document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
+  if(name==="users") buildAdminUsers();
+  if(name==="log") buildAdminLog();
+  if(name==="weights") buildAdminWeights();
+}
+document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
+document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
+document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
+
+const ROLE_LABELS = {
+  inspecteur:"Inspecteur (RPO)", manager:"Manager",
+  directeur_regional:"Directeur régional", directeur_general:"Directeur général", admin:"Admin"
+};
+let lastAdminUsers = [];
+
+async function buildAdminUsers(){
+  const status = document.getElementById("adminUsersStatus");
+  const body = document.getElementById("adminUsersBody");
+  status.textContent = "Chargement…";
+  try{
+    const { users } = await callAdminUsersFn({ action:"list" });
+    lastAdminUsers = users || [];
+    renderAdminUsers();
+    status.textContent = lastAdminUsers.length + " compte(s)";
+  }catch(e){
+    status.textContent = "";
+    body.innerHTML = `<tr><td colspan="6" style="color:#a11313;">Erreur : ${e.message}</td></tr>`;
+  }
+}
+
+function renderAdminUsers(){
+  const body = document.getElementById("adminUsersBody");
+  const q = normalizeSearch(document.getElementById("adminUsersSearch").value || "");
+  body.innerHTML = "";
+  lastAdminUsers
+    .filter(u=> !q || normalizeSearch((u.full_name||"")+" "+(u.email||"")).includes(q))
+    .forEach(u=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${u.full_name || "-"}</td>
+        <td>${u.email || "-"}</td>
+        <td>${ROLE_LABELS[u.role] || u.role || "-"}</td>
+        <td>${u.region || "-"}</td>
+        <td>${u.disabled ? '<span class="taux-tag" style="background:var(--bad-bg);color:var(--bad-fg);">Désactivé</span>' : '<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">Actif</span>'}</td>
+        <td style="white-space:normal;">
+          <button data-edit style="border:none;background:none;color:var(--navy);font-weight:700;cursor:pointer;font-size:12px;margin-right:8px;">Modifier</button>
+          <button data-pwd style="border:none;background:none;color:var(--navy);font-weight:700;cursor:pointer;font-size:12px;margin-right:8px;">Mot de passe</button>
+          <button data-toggle style="border:none;background:none;color:#8a5a00;font-weight:700;cursor:pointer;font-size:12px;margin-right:8px;">${u.disabled?"Réactiver":"Désactiver"}</button>
+          <button data-del style="border:none;background:none;color:#a11313;font-weight:700;cursor:pointer;font-size:12px;">Supprimer</button>
+        </td>`;
+      tr.querySelector("[data-edit]").addEventListener("click", ()=> openUserModal(u));
+      tr.querySelector("[data-pwd]").addEventListener("click", async ()=>{
+        const pwd = prompt("Nouveau mot de passe pour " + (u.full_name||u.email) + " (min. 6 caractères) :");
+        if(!pwd) return;
+        try{
+          await callAdminUsersFn({ action:"reset_password", id:u.id, password:pwd });
+          showToast("Mot de passe réinitialisé.");
+          logActivity("Réinitialisation mot de passe", u.full_name || u.email, null);
+        }catch(e){ showToast("Échec : " + e.message, 5000); }
+      });
+      tr.querySelector("[data-toggle]").addEventListener("click", async ()=>{
+        const ok = await askConfirm((u.disabled?"Réactiver":"Désactiver") + " le compte de " + (u.full_name||u.email) + " ?");
+        if(!ok) return;
+        try{
+          await callAdminUsersFn({ action:"set_disabled", id:u.id, disabled: !u.disabled });
+          showToast(u.disabled ? "Compte réactivé." : "Compte désactivé.");
+          logActivity(u.disabled ? "Réactivation compte" : "Désactivation compte", u.full_name || u.email, null);
+          await buildAdminUsers();
+        }catch(e){ showToast("Échec : " + e.message, 5000); }
+      });
+      tr.querySelector("[data-del]").addEventListener("click", async ()=>{
+        const ok = await askConfirm("Supprimer définitivement le compte de " + (u.full_name||u.email) + " ? Cette action est irréversible.");
+        if(!ok) return;
+        try{
+          await callAdminUsersFn({ action:"delete", id:u.id });
+          showToast("Compte supprimé.");
+          logActivity("Suppression compte", u.full_name || u.email, null);
+          await buildAdminUsers();
+        }catch(e){ showToast("Échec : " + e.message, 5000); }
+      });
+      body.appendChild(tr);
+    });
+}
+document.getElementById("adminUsersSearch").addEventListener("input", renderAdminUsers);
+
+let userModalMode = "create";
+let userModalTarget = null;
+function openUserModal(user){
+  userModalMode = user ? "edit" : "create";
+  userModalTarget = user || null;
+  document.getElementById("userModalTitle").textContent = user ? "Modifier le compte" : "Nouveau compte";
+  document.getElementById("userFormName").value = user ? (user.full_name||"") : "";
+  document.getElementById("userFormEmail").value = user ? (user.email||"") : "";
+  document.getElementById("userFormEmail").disabled = !!user;
+  document.getElementById("userFormPasswordField").style.display = user ? "none" : "";
+  document.getElementById("userFormPassword").value = "";
+  document.getElementById("userFormRole").value = user ? (user.role||"inspecteur") : "inspecteur";
+  document.getElementById("userFormRegion").value = user ? (user.region||"Est") : "Est";
+  document.getElementById("userFormRegionField").style.display = (document.getElementById("userFormRole").value === "directeur_regional") ? "" : "none";
+  document.getElementById("userFormError").style.display = "none";
+  document.getElementById("userModalOverlay").classList.add("open");
+}
+document.getElementById("userFormRole").addEventListener("change", (e)=>{
+  document.getElementById("userFormRegionField").style.display = (e.target.value === "directeur_regional") ? "" : "none";
+});
+document.getElementById("btnNewUser").addEventListener("click", ()=> openUserModal(null));
+document.getElementById("userFormCancel").addEventListener("click", ()=>{
+  document.getElementById("userModalOverlay").classList.remove("open");
+});
+document.getElementById("userFormSave").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("userFormError");
+  errEl.style.display = "none";
+  const full_name = document.getElementById("userFormName").value.trim();
+  const email = document.getElementById("userFormEmail").value.trim();
+  const password = document.getElementById("userFormPassword").value;
+  const role = document.getElementById("userFormRole").value;
+  const region = (role === "directeur_regional") ? document.getElementById("userFormRegion").value : null;
+  if(!full_name || !email || (userModalMode==="create" && !password)){
+    errEl.textContent = "Merci de renseigner tous les champs obligatoires.";
+    errEl.style.display = "block";
+    return;
+  }
+  const btn = document.getElementById("userFormSave");
+  btn.disabled = true; btn.textContent = "Enregistrement…";
+  try{
+    if(userModalMode === "create"){
+      await callAdminUsersFn({ action:"create", email, password, full_name, role, region });
+      logActivity("Création compte", full_name, "Rôle : " + ROLE_LABELS[role]);
+      showToast("Compte créé.");
+    } else {
+      await callAdminUsersFn({ action:"update_profile", id:userModalTarget.id, full_name, role, region });
+      logActivity("Modification compte", full_name, "Rôle : " + ROLE_LABELS[role]);
+      showToast("Compte modifié.");
+    }
+    document.getElementById("userModalOverlay").classList.remove("open");
+    await buildAdminUsers();
+  }catch(e){
+    errEl.textContent = "Échec : " + e.message;
+    errEl.style.display = "block";
+  }
+  btn.disabled = false; btn.textContent = "Enregistrer";
+});
+
+let lastActivityLog = [];
+async function buildAdminLog(){
+  const status = document.getElementById("adminLogStatus");
+  const body = document.getElementById("adminLogBody");
+  status.textContent = "Chargement…";
+  try{
+    const { data, error } = await sb.from("activity_log").select("*").order("created_at", { ascending:false }).limit(300);
+    if(error) throw error;
+    lastActivityLog = data || [];
+    renderAdminLog();
+    status.textContent = lastActivityLog.length + " entrée(s) — 300 dernières";
+  }catch(e){
+    status.textContent = "";
+    body.innerHTML = `<tr><td colspan="6" style="color:#a11313;">Erreur : ${e.message}</td></tr>`;
+  }
+}
+function renderAdminLog(){
+  const body = document.getElementById("adminLogBody");
+  const q = normalizeSearch(document.getElementById("adminLogSearch").value || "");
+  body.innerHTML = "";
+  lastActivityLog
+    .filter(l=> !q || normalizeSearch((l.actor_name||"")+" "+(l.action||"")+" "+(l.target||"")).includes(q))
+    .forEach(l=>{
+      const tr = document.createElement("tr");
+      const dt = l.created_at ? new Date(l.created_at).toLocaleString("fr-FR") : "-";
+      tr.innerHTML = `
+        <td style="white-space:nowrap;">${dt}</td>
+        <td>${l.actor_name || "-"}</td>
+        <td>${ROLE_LABELS[l.actor_role] || l.actor_role || "-"}</td>
+        <td>${l.action || "-"}</td>
+        <td>${l.target || "-"}</td>
+        <td style="white-space:normal;color:var(--muted);">${l.details || ""}</td>`;
+      body.appendChild(tr);
+    });
+}
+document.getElementById("adminLogSearch").addEventListener("input", renderAdminLog);
+document.getElementById("btnRefreshLog").addEventListener("click", buildAdminLog);
+
+function buildAdminWeights(){
+  const body = document.getElementById("adminWeightsBody");
+  body.innerHTML = "";
+  SECTIONS.forEach(sec=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${sec.name}</td>
+      <td><input type="number" min="0" max="100" step="0.5" value="${sec.weight}" data-key="${sec.key}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>`;
+    body.appendChild(tr);
+  });
+}
+document.getElementById("btnSaveWeights").addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("adminWeightsStatus");
+  const inputs = [...document.querySelectorAll("#adminWeightsBody input[data-key]")];
+  const values = inputs.map(i=> ({ key:i.dataset.key, weight: Number(i.value) }));
+  const total = values.reduce((s,v)=> s + v.weight, 0);
+  if(Math.abs(total - 100) > 0.01){
+    statusEl.textContent = `La somme des poids est de ${total}% — elle doit être égale à 100%.`;
+    statusEl.style.color = "#a11313";
+    return;
+  }
+  statusEl.textContent = "Enregistrement…";
+  statusEl.style.color = "var(--muted)";
+  try{
+    for(const v of values){
+      const { error } = await sb.from("section_weights")
+        .update({ weight:v.weight, updated_at:new Date().toISOString(), updated_by:currentUser.id })
+        .eq("section_key", v.key);
+      if(error) throw error;
+    }
+    values.forEach(v=>{
+      const sec = SECTIONS.find(s=> s.key === v.key);
+      if(sec) sec.weight = v.weight;
+    });
+    recompute();
+    statusEl.textContent = "Pondération enregistrée.";
+    statusEl.style.color = "#1c6b2e";
+    logActivity("Modification pondération", null, values.map(v=> v.key+":"+v.weight+"%").join(", "));
+  }catch(e){
+    statusEl.textContent = "Échec : " + e.message;
+    statusEl.style.color = "#a11313";
+  }
+});
 
 // ======================================================================
 // ÉVOLUTION AGENCE (graphique du taux de conformité visite après visite)
@@ -2424,6 +2807,7 @@ document.getElementById("btnClose").addEventListener("click", async ()=>{
   try{
     await closeRecordById(currentRecordId);
     showToast("Visite clôturée — elle est maintenant visible pour approbation par le manager.");
+    logActivity("Clôture visite", state.header.agence, "Date visite : " + (state.header.date||"-"));
   }catch(e){ showToast("Clôture impossible — réessaie.", 4000); }
 });
 
@@ -2457,6 +2841,8 @@ function applyRoleUI(){
   }
 
   const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general");
+
+  document.getElementById("tabAdmin").style.display = (currentRole === "admin") ? "" : "none";
 
   if(isReadOnlyRole){
     document.getElementById("tabInspection").style.display = "none";
@@ -2527,6 +2913,7 @@ async function toggleCorrectionEnabled(){
     correctionEnabled = next;
     await fetchCorrectionEnabled();
     showToast(next ? "Correction DR réactivée." : "Correction DR désactivée jusqu'à nouvel ordre.", 3500);
+    logActivity(next ? "Correction DR réactivée" : "Correction DR désactivée", null, null);
   }catch(e){
     console.warn("Impossible de mettre à jour le réglage :", e);
     showToast("Impossible d'enregistrer — vérifie ta connexion internet.", 4000);
@@ -2576,15 +2963,17 @@ function askForName(){
   document.getElementById("nameInput").focus();
 }
 
-function completeLogin(){
+async function completeLogin(){
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("nameScreen").style.display = "none";
   fillAgenceList();
   bindHeader();
+  await loadSectionWeights();
   buildSections();
   recompute();
   applyRoleUI();
   setupRealtime();
+  logActivity("Connexion", null, null);
 }
 
 document.getElementById("nameBtn").addEventListener("click", async ()=>{
