@@ -133,7 +133,7 @@
   select.status{
     width:100%; padding:7px 8px; border-radius:7px; border:1px solid var(--line);
     font-size:12.5px; font-weight:600; cursor:pointer; font-family:var(--sans);
-    background:#fff; color:var(--muted);
+    background:var(--card); color:var(--muted);
   }
   select.status.conforme{ background:var(--ok-bg); color:var(--ok-fg); border-color:#bfe3c6; }
   select.status.nonconforme{ background:var(--bad-bg); color:var(--bad-fg); border-color:#f0bcbc; }
@@ -205,7 +205,7 @@
     display:flex; align-items:center; justify-content:center; padding:20px;
   }
   .login-box{
-    background:#fff; border-radius:14px; padding:32px 30px; width:100%; max-width:360px;
+    background:var(--card); border-radius:14px; padding:32px 30px; width:100%; max-width:360px;
     box-shadow:0 20px 60px rgba(0,0,0,.35);
   }
   .login-box img{ height:36px; display:block; margin:0 auto 22px; }
@@ -237,12 +237,12 @@
   }
   .modal-overlay.open{ display:flex; }
   .modal-box{
-    background:#fff; border-radius:12px; max-width:420px; width:100%; padding:22px;
+    background:var(--card); border-radius:12px; max-width:420px; width:100%; padding:22px;
     box-shadow:0 20px 50px rgba(0,0,0,.3);
   }
   .modal-box p{ font-size:13.5px; line-height:1.5; color:var(--ink); margin:0 0 18px; }
   .modal-actions{ display:flex; justify-content:flex-end; gap:10px; }
-  .modal-actions button{ padding:8px 16px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--line); background:#fff; }
+  .modal-actions button{ padding:8px 16px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--ink); }
   .modal-actions button.confirm{ background:var(--red); color:#fff; border-color:var(--red); }
   .toast{
     position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:200;
@@ -418,7 +418,7 @@
     </div>
     <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
       <input type="text" id="dashSearch" placeholder="🔍 Rechercher une agence…" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
-      <select id="dashStatusFilter" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;">
+      <select id="dashStatusFilter" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--card);color:var(--ink);">
         <option value="">Tous les statuts</option>
         <option value="approved">Approuvé</option>
         <option value="closed">Clôturée (non approuvée)</option>
@@ -461,7 +461,7 @@
       </div>
     </div>
     <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-      <select id="evolAgenceSelect" style="flex:1;min-width:240px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;">
+      <select id="evolAgenceSelect" style="flex:1;min-width:240px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--card);color:var(--ink);">
         <option value="">— Choisir une agence —</option>
       </select>
     </div>
@@ -507,7 +507,7 @@
     </div>
     <div class="dash-filters" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
       <input type="text" id="analyseSearch" placeholder="🔍 Rechercher un point de contrôle…" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;">
-      <select id="analyseSectionFilter" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;">
+      <select id="analyseSectionFilter" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--card);color:var(--ink);">
         <option value="">Toutes les sections</option>
       </select>
       <span id="analyseFilterCount" style="font-size:11.5px;color:var(--muted);"></span>
