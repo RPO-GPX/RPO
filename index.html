@@ -582,7 +582,7 @@
         <span id="adminReportStatus" style="font-size:11.5px;color:var(--muted);"></span>
       </div>
 
-      <div id="reportSummary" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;">
+      <div id="reportSummary" style="display:none;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px;">
         <div class="stat-box">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Couverture</div>
           <div id="repCoverage" style="font-size:22px;font-weight:800;color:var(--navy);margin-top:4px;">–</div>
@@ -590,6 +590,10 @@
         <div class="stat-box">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Taux moyen réseau</div>
           <div id="repAvgTaux" style="font-size:22px;font-weight:800;color:var(--red);margin-top:4px;">–</div>
+        </div>
+        <div class="stat-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Objectif atteint (≥80%)</div>
+          <div id="repObjectif" style="font-size:22px;font-weight:800;color:#1c6b2e;margin-top:4px;">–</div>
         </div>
         <div class="stat-box">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Meilleure agence</div>
@@ -602,7 +606,13 @@
       </div>
 
       <div id="reportTables" style="display:none;">
-        <h3 style="font-size:13.5px;margin:0 0 8px;">Classement des agences visitées</h3>
+        <h3 style="font-size:13.5px;margin:0 0 8px;">Agences sous l'objectif (moins de 80%)</h3>
+        <table class="dash" id="reportObjectifTable">
+          <thead><tr><th>Agence</th><th>Taux</th><th>Écart à l'objectif</th></tr></thead>
+          <tbody id="reportObjectifBody"></tbody>
+        </table>
+
+        <h3 style="font-size:13.5px;margin:22px 0 8px;">Classement des agences visitées</h3>
         <table class="dash" id="reportRankingTable">
           <thead><tr><th>Rang</th><th>Agence</th><th>Date visite</th><th>Taux</th><th>Appréciation</th></tr></thead>
           <tbody id="reportRankingBody"></tbody>
@@ -2255,7 +2265,7 @@ function switchView(name){
   if(name==="evolution") initEvolutionView();
   if(name==="analyse") buildAnalyse();
   if(name==="admin"){
-    if(currentRole === "manager") adminSwitchSub("report");
+    if(currentRole === "manager" || currentRole === "directeur_general") adminSwitchSub("report");
     else buildAdminUsers();
   }
 }
@@ -2558,6 +2568,13 @@ async function buildMonthlyReport(){
   const avgTaux = withTaux.length ? withTaux.reduce((s,r)=> s+r.taux, 0) / withTaux.length : null;
   const ranking = [...withTaux].sort((a,b)=> b.taux - a.taux);
 
+  const OBJECTIF = 0.8; // même seuil que l'appréciation "Conforme" (apprLabel)
+  const objectifAtteint = withTaux.filter(r=> r.taux >= OBJECTIF).length;
+  const sousObjectif = withTaux
+    .filter(r=> r.taux < OBJECTIF)
+    .map(r=> ({ agence:r.agence, taux:r.taux, ecart: Math.round((OBJECTIF - r.taux)*100) }))
+    .sort((a,b)=> a.taux - b.taux);
+
   const sectionAgg = {};
   visited.forEach(r=>{
     const statuts = r.statuts || {};
@@ -2587,7 +2604,7 @@ async function buildMonthlyReport(){
     .sort((a,b)=> b.count-a.count)
     .slice(0,15);
 
-  lastMonthlyReport = { monthInput, totalAgences, visitedCount:visited.length, avgTaux, ranking, sectionRows, pointsRows };
+  lastMonthlyReport = { monthInput, totalAgences, visitedCount:visited.length, avgTaux, objectifAtteint, sousObjectif, ranking, sectionRows, pointsRows };
   renderMonthlyReport();
   status.textContent = "Rapport généré pour " + formatMonthLabel(monthInput) + ".";
   logActivity("Génération rapport mensuel", formatMonthLabel(monthInput), visited.length + " agence(s) couverte(s)");
@@ -2601,11 +2618,27 @@ function renderMonthlyReport(){
 
   document.getElementById("repCoverage").textContent = r.visitedCount + " / " + r.totalAgences;
   document.getElementById("repAvgTaux").textContent = r.avgTaux==null ? "–" : Math.round(r.avgTaux*100)+"%";
+  document.getElementById("repObjectif").textContent = r.objectifAtteint + " / " + r.ranking.length;
 
   const best = r.ranking[0];
   const worst = r.ranking[r.ranking.length-1];
   document.getElementById("repBestAgence").innerHTML = best ? (escapeHtml(best.agence) + `<br><span class="taux-tag" style="${tierTagStyle(best.taux)}">${Math.round(best.taux*100)}%</span>`) : "–";
   document.getElementById("repWorstAgence").innerHTML = (worst && r.ranking.length>1) ? (escapeHtml(worst.agence) + `<br><span class="taux-tag" style="${tierTagStyle(worst.taux)}">${Math.round(worst.taux*100)}%</span>`) : "–";
+
+  const objBody = document.getElementById("reportObjectifBody");
+  objBody.innerHTML = "";
+  if(r.sousObjectif.length === 0){
+    objBody.innerHTML = `<tr><td colspan="3" class="agence-empty">Toutes les agences visitées ont atteint l'objectif ce mois-ci. 🎉</td></tr>`;
+  } else {
+    r.sousObjectif.forEach(s=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(s.agence)}</td>
+        <td><span class="taux-tag" style="${tierTagStyle(s.taux)}">${Math.round(s.taux*100)}%</span></td>
+        <td style="color:#a11313;font-weight:700;">-${s.ecart} pts</td>`;
+      objBody.appendChild(tr);
+    });
+  }
 
   const rankBody = document.getElementById("reportRankingBody");
   rankBody.innerHTML = "";
@@ -2662,9 +2695,14 @@ document.getElementById("btnExportReportExcel").addEventListener("click", ()=>{
     [],
     ["Agences visitées", r.visitedCount + " / " + r.totalAgences],
     ["Taux moyen réseau", r.avgTaux==null ? "n/a" : Math.round(r.avgTaux*100)+"%"],
+    ["Objectif atteint (≥80%)", r.objectifAtteint + " / " + r.ranking.length],
     ["Meilleure agence", r.ranking[0] ? r.ranking[0].agence + " (" + Math.round(r.ranking[0].taux*100) + "%)" : "-"],
     ["Agence à améliorer", r.ranking.length>1 ? r.ranking[r.ranking.length-1].agence + " (" + Math.round(r.ranking[r.ranking.length-1].taux*100) + "%)" : "-"]
   ]);
+
+  const objData = [["Agence","Taux","Écart à l'objectif (pts)"]];
+  r.sousObjectif.forEach(s=> objData.push([s.agence, Math.round(s.taux*100)+"%", "-"+s.ecart]));
+  const wsObjectif = XLSX.utils.aoa_to_sheet(objData);
 
   const rankData = [["Rang","Agence","Date visite","Taux","Appréciation"]];
   r.ranking.forEach((rec,i)=> rankData.push([i+1, rec.agence, rec.date||"-", Math.round(rec.taux*100)+"%", apprLabel(rec.taux)]));
@@ -2680,6 +2718,7 @@ document.getElementById("btnExportReportExcel").addEventListener("click", ()=>{
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsSummary, "Résumé Exécutif");
+  XLSX.utils.book_append_sheet(wb, wsObjectif, "Sous Objectif");
   XLSX.utils.book_append_sheet(wb, wsRanking, "Classement Agences");
   XLSX.utils.book_append_sheet(wb, wsSections, "Moyenne Sections");
   XLSX.utils.book_append_sheet(wb, wsPoints, "Points Récurrents");
@@ -3093,11 +3132,11 @@ function applyRoleUI(){
 
   const isReadOnlyRole = (currentRole === "manager" || currentRole === "directeur_regional" || currentRole === "directeur_general");
 
-  const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager");
+  const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager" || currentRole === "directeur_general");
   document.getElementById("tabAdmin").style.display = canSeeAdminTab ? "" : "none";
-  document.getElementById("tabAdmin").textContent = (currentRole === "manager") ? "Rapport mensuel" : "Administration";
-  document.getElementById("adminTitle").textContent = (currentRole === "manager") ? "Rapport mensuel" : "Administration";
-  document.getElementById("adminSubTabsBar").style.display = (currentRole === "manager") ? "none" : "";
+  document.getElementById("tabAdmin").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
+  document.getElementById("adminTitle").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
+  document.getElementById("adminSubTabsBar").style.display = (currentRole === "admin") ? "" : "none";
 
   if(isReadOnlyRole){
     document.getElementById("tabInspection").style.display = "none";
