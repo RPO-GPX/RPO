@@ -606,6 +606,9 @@
       </div>
 
       <div id="reportTables" style="display:none;">
+        <h3 style="font-size:13.5px;margin:0 0 8px;">Top / Flop agences</h3>
+        <div id="reportTopFlopChart" style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:22px;overflow-x:auto;"></div>
+
         <h3 style="font-size:13.5px;margin:0 0 8px;">Agences sous l'objectif (moins de 80%)</h3>
         <table class="dash" id="reportObjectifTable">
           <thead><tr><th>Agence</th><th>Taux</th><th>Écart à l'objectif</th></tr></thead>
@@ -619,6 +622,7 @@
         </table>
 
         <h3 style="font-size:13.5px;margin:22px 0 8px;">Moyenne par section</h3>
+        <div id="reportSectionsChart" style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px;overflow-x:auto;"></div>
         <table class="dash" id="reportSectionsTable" style="max-width:520px;">
           <thead><tr><th>Section</th><th>Taux moyen</th></tr></thead>
           <tbody id="reportSectionsBody"></tbody>
@@ -1467,6 +1471,37 @@ function tierTagStyle(taux){
   if(taux>=0.8) return "background:var(--ok-bg);color:var(--ok-fg);";
   if(taux>=0.51) return "background:var(--warn-bg);color:var(--warn-fg);";
   return "background:var(--bad-bg);color:var(--bad-fg);";
+}
+function tierBarColor(taux){
+  if(taux===null||taux===undefined) return "#9aa1ab";
+  if(taux>=0.8) return "#1c6b2e";
+  if(taux>=0.51) return "#8a5a00";
+  return "#a11313";
+}
+// Construit un petit graphique en barres horizontales (SVG, sans dépendance externe).
+// rows: [{label, value(0-1), color}], value affiché en %.
+function horizontalBarChartSVG(rows, opts){
+  opts = opts || {};
+  const w = opts.width || 600;
+  const rowH = opts.rowHeight || 26;
+  const gap = 6;
+  const labelW = opts.labelWidth || 170;
+  const barAreaW = w - labelW - 50;
+  const h = rows.length * (rowH + gap) + gap;
+  let bars = "";
+  rows.forEach((r,i)=>{
+    const y = gap + i*(rowH+gap);
+    const val = r.value==null ? 0 : r.value;
+    const barW = Math.max(2, val * barAreaW);
+    const color = r.color || tierBarColor(r.value);
+    const pct = r.value==null ? "–" : Math.round(r.value*100)+"%";
+    bars += `
+      <text x="${labelW-8}" y="${y+rowH/2+4}" text-anchor="end" font-size="11.5" fill="var(--ink)">${escapeHtml(r.label)}</text>
+      <rect x="${labelW}" y="${y}" width="${barAreaW}" height="${rowH}" rx="4" fill="var(--line)" opacity="0.4"></rect>
+      <rect x="${labelW}" y="${y}" width="${barW}" height="${rowH}" rx="4" fill="${color}"></rect>
+      <text x="${labelW+barAreaW+8}" y="${y+rowH/2+4}" font-size="11.5" font-weight="700" fill="var(--ink)">${pct}</text>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px;display:block;font-family:var(--sans);">${bars}</svg>`;
 }
 function apprLabel(taux){
   if(taux===null||taux===undefined) return "–";
@@ -2638,6 +2673,28 @@ function renderMonthlyReport(){
         <td style="color:#a11313;font-weight:700;">-${s.ecart} pts</td>`;
       objBody.appendChild(tr);
     });
+  }
+
+  // Top / Flop agences : les 5 meilleures + les 5 moins bonnes (sans doublon si moins de 10 agences visitées)
+  const topFlopEl = document.getElementById("reportTopFlopChart");
+  if(r.ranking.length === 0){
+    topFlopEl.innerHTML = `<p class="agence-empty" style="margin:0;">Aucune agence visitée ce mois-ci.</p>`;
+  } else {
+    const top5 = r.ranking.slice(0, 5);
+    const flop5 = r.ranking.slice(-5).reverse();
+    const seen = new Set(top5.map(r=>r.agence));
+    const flopUnique = flop5.filter(r=> !seen.has(r.agence));
+    const rows = [...top5, ...flopUnique].map(rec=> ({ label: rec.agence, value: rec.taux }));
+    topFlopEl.innerHTML = horizontalBarChartSVG(rows, { width: 620 });
+  }
+
+  // Moyenne par section
+  const sectionsChartEl = document.getElementById("reportSectionsChart");
+  if(r.sectionRows.length === 0){
+    sectionsChartEl.innerHTML = `<p class="agence-empty" style="margin:0;">Aucune donnée de section ce mois-ci.</p>`;
+  } else {
+    const secRows = r.sectionRows.map(s=> ({ label: s.name, value: s.avg }));
+    sectionsChartEl.innerHTML = horizontalBarChartSVG(secRows, { width: 620, labelWidth: 150 });
   }
 
   const rankBody = document.getElementById("reportRankingBody");
