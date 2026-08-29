@@ -2951,8 +2951,9 @@ function renderOMList(){
     if(o.statut === "validee"){
       if(o.traite){
         const link = document.createElement("button");
-        link.textContent = "✓ Traité — voir le scan";
-        link.style.cssText = "border:none;background:none;color:var(--ok-fg);font-weight:700;cursor:pointer;font-size:11.5px;text-decoration:underline;";
+        link.textContent = "Voir le scan";
+        link.className = "taux-tag";
+        link.style.cssText = "background:var(--ok-bg);color:var(--ok-fg);border:none;cursor:pointer;font-size:11.5px;";
         link.title = "Traité par " + (o.traite_par_nom||"-");
         link.addEventListener("click", ()=> openOMScan(o));
         traiteTd.appendChild(link);
