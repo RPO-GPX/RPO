@@ -44,6 +44,11 @@
     padding-top:6px; border-top:1px solid rgba(255,255,255,.1);
   }
   .topbar-ctx{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .announce-banner{
+    background:var(--warn-bg); color:var(--warn-fg);
+    padding:8px 18px; font-size:13px; font-weight:700; text-align:center;
+    border-top:1px solid rgba(0,0,0,.08);
+  }
   .brand{ display:flex; align-items:center; gap:8px; font-weight:800; letter-spacing:.5px; }
   .brand img{ height:32px; width:auto; display:block; }
   .brand .guep{ color:#fff; }
@@ -169,6 +174,12 @@
     font-size:13px; padding:8px 4px; cursor:pointer; border-bottom:2px solid transparent;
   }
   .tab.active{ color:#fff; border-bottom-color:var(--red); }
+  .tab-badge{
+    position:absolute; top:-2px; right:-8px;
+    background:var(--red); color:#fff; font-size:10px; font-weight:800;
+    min-width:16px; height:16px; padding:0 4px; border-radius:999px;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
   .subtab{
     background:transparent; border:none; color:var(--muted); font-weight:700;
     font-size:12.5px; padding:8px 14px; cursor:pointer; border-bottom:2px solid transparent;
@@ -303,6 +314,44 @@
     text-align:center;
   }
   .pv-sig .sigline{ margin-top:44px; border-top:1px solid #000; }
+
+  /* ---------- corrections affichage mobile / petits écrans ---------- */
+  @media (max-width: 760px){
+    .header-card{ grid-template-columns:1fr; padding:16px; }
+    .item{ grid-template-columns:28px 1fr; row-gap:8px; }
+    .item select.status{ grid-column:1 / -1; width:100%; }
+    .item .anom{ grid-column:1 / -1; }
+
+    .topbar-row2 .tabs{
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      max-width:100%; padding-bottom:2px;
+    }
+    .topbar-row2 .tabs .tab{ flex:0 0 auto; white-space:nowrap; }
+    #adminSubTabsBar{
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      max-width:100%; padding-bottom:2px;
+    }
+    #adminSubTabsBar .subtab{ flex:0 0 auto; white-space:nowrap; }
+    .topbar-ctx{ gap:8px; }
+    .topbar-ctx .btn{ padding:6px 10px; font-size:12px; }
+
+    .dash-wrap{ padding:0 10px; }
+    table.dash{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+    .modal-box{ padding:16px; }
+    #userModalOverlay .modal-box,
+    #omModalOverlay .modal-box{ max-width:100%; }
+    #omModalOverlay .modal-box > div[style*="grid-template-columns:1fr 1fr"]{
+      grid-template-columns:1fr !important;
+    }
+
+    #reportSummary{ grid-template-columns:repeat(2,1fr) !important; }
+    .stat-box{ padding:10px 12px; }
+    .stat-box > div:first-child{ font-size:10px; }
+
+    .dash-toolbar{ align-items:flex-start; }
+    .dash-toolbar h2{ font-size:16px; }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -351,7 +400,7 @@
       <button class="tab" id="tabDashboard">Tableau de bord</button>
       <button class="tab" id="tabEvolution">Évolution agence</button>
       <button class="tab" id="tabAnalyse">Analyse</button>
-      <button class="tab" id="tabOM" style="display:none;">Ordres de mission</button>
+      <button class="tab" id="tabOM" style="display:none;position:relative;">Ordres de mission<span id="omBadge" class="tab-badge" style="display:none;"></span></button>
       <button class="tab" id="tabAdmin" style="display:none;">Administration</button>
     </div>
     <div class="sep"></div>
@@ -367,6 +416,9 @@
     <div class="topbar-ctx" id="ctxDashboard" style="display:none;">
       <div class="taux-pill" id="pillTotalEmployes" style="display:none;">Personnel total <b id="tbTotalEmployes">–</b></div>
     </div>
+  </div>
+  <div class="announce-banner" id="announceBanner" style="display:none;">
+    📢 <span id="announceText"></span>
   </div>
 </div>
 
@@ -592,6 +644,7 @@
         <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
         <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Pondération des sections</button>
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
+        <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
       </div>
     </div>
 
@@ -698,6 +751,32 @@
           <tbody id="reportPointsBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ---- Annonce ---- -->
+    <div id="adminPaneAnnonce" style="display:none;">
+      <div id="annonceCurrentBox" style="display:none;background:var(--warn-bg);border:1px solid #f0d38a;border-radius:10px;padding:14px 16px;margin-bottom:20px;max-width:640px;">
+        <div style="font-size:11px;color:var(--warn-fg);text-transform:uppercase;letter-spacing:.3px;font-weight:800;margin-bottom:6px;">Annonce active</div>
+        <div id="annonceCurrentText" style="font-size:13.5px;color:var(--ink);margin-bottom:6px;"></div>
+        <div id="annonceCurrentMeta" style="font-size:11.5px;color:var(--muted);margin-bottom:10px;"></div>
+        <button class="btn ghost" id="btnDeactivateAnnonce" style="border:1px solid var(--line);color:var(--ink);padding:7px 14px;border-radius:7px;">Désactiver maintenant</button>
+      </div>
+
+      <h3 style="font-size:13.5px;margin:0 0 8px;">Publier une nouvelle annonce</h3>
+      <p style="font-size:12.5px;color:var(--muted);max-width:560px;margin:0 0 14px;">
+        Visible par tous les rôles, en bandeau imposé dans la barre du haut, jusqu'à la date de fin choisie.
+        Publier une nouvelle annonce désactive automatiquement la précédente.
+      </p>
+      <div class="login-field" style="max-width:560px;">
+        <label>Message</label>
+        <textarea id="annonceFormMessage" rows="3" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 11px;font-size:14px;font-family:var(--sans);resize:vertical;"></textarea>
+      </div>
+      <div class="login-field" style="max-width:220px;">
+        <label>Date de fin</label>
+        <input type="date" id="annonceFormEndDate">
+      </div>
+      <p id="annonceFormError" style="display:none;color:#a11313;font-size:12.5px;margin:4px 0 10px;"></p>
+      <button class="btn primary" id="btnPublishAnnonce" style="padding:9px 16px;border-radius:8px;">Publier l'annonce</button>
     </div>
   </div>
 </div>
@@ -2416,19 +2495,23 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneLog").style.display = (name==="log") ? "" : "none";
   document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
   document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
+  document.getElementById("adminPaneAnnonce").style.display = (name==="annonce") ? "" : "none";
   document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
   document.getElementById("adminSubReport").classList.toggle("active", name==="report");
+  document.getElementById("adminSubAnnonce").classList.toggle("active", name==="annonce");
   if(name==="users") buildAdminUsers();
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
   if(name==="report") initReportPane();
+  if(name==="annonce") buildAnnoncePane();
 }
 document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
 document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
 document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
+document.getElementById("adminSubAnnonce").addEventListener("click", ()=> adminSwitchSub("annonce"));
 
 const ROLE_LABELS = {
   inspecteur:"Inspecteur (RPO)", manager:"Manager",
@@ -2884,6 +2967,104 @@ document.getElementById("btnExportReportExcel").addEventListener("click", ()=>{
 });
 
 // ======================================================================
+// ANNONCE (bandeau imposé dans la topbar, Admin/Manager)
+// ======================================================================
+async function loadAnnouncement(){
+  const banner = document.getElementById("announceBanner");
+  const textEl = document.getElementById("announceText");
+  try{
+    const today = new Date().toISOString().slice(0,10);
+    const { data, error } = await sb.from("announcements")
+      .select("*").eq("active", true).gte("end_date", today)
+      .order("created_at", { ascending:false }).limit(1);
+    if(error) throw error;
+    const a = (data && data[0]) || null;
+    if(a){
+      textEl.textContent = a.message;
+      banner.style.display = "block";
+    } else {
+      banner.style.display = "none";
+    }
+  }catch(e){ banner.style.display = "none"; }
+}
+
+async function buildAnnoncePane(){
+  const box = document.getElementById("annonceCurrentBox");
+  document.getElementById("annonceFormMessage").value = "";
+  document.getElementById("annonceFormEndDate").value = "";
+  document.getElementById("annonceFormError").style.display = "none";
+  try{
+    const today = new Date().toISOString().slice(0,10);
+    const { data, error } = await sb.from("announcements")
+      .select("*").eq("active", true).gte("end_date", today)
+      .order("created_at", { ascending:false }).limit(1);
+    if(error) throw error;
+    const a = (data && data[0]) || null;
+    if(a){
+      document.getElementById("annonceCurrentText").textContent = a.message;
+      document.getElementById("annonceCurrentMeta").textContent =
+        "Publiée par " + (a.created_by_nom||"-") + " · jusqu'au " + formatDateFR(a.end_date);
+      box.dataset.id = a.id;
+      box.style.display = "block";
+    } else {
+      box.style.display = "none";
+    }
+  }catch(e){ box.style.display = "none"; }
+}
+
+document.getElementById("btnPublishAnnonce").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("annonceFormError");
+  errEl.style.display = "none";
+  const message = document.getElementById("annonceFormMessage").value.trim();
+  const endDate = document.getElementById("annonceFormEndDate").value;
+  const today = new Date().toISOString().slice(0,10);
+  if(!message || !endDate){
+    errEl.textContent = "Merci de renseigner le message et la date de fin.";
+    errEl.style.display = "block";
+    return;
+  }
+  if(endDate < today){
+    errEl.textContent = "La date de fin ne peut pas être dans le passé.";
+    errEl.style.display = "block";
+    return;
+  }
+  const btn = document.getElementById("btnPublishAnnonce");
+  btn.disabled = true; btn.textContent = "Publication…";
+  try{
+    const { error: deactErr } = await sb.from("announcements").update({ active:false }).eq("active", true);
+    if(deactErr) throw deactErr;
+    const { error } = await sb.from("announcements").insert({
+      message, end_date: endDate,
+      created_by: currentUser.id,
+      created_by_nom: currentUserName || currentUser.email
+    });
+    if(error) throw error;
+    showToast("Annonce publiée.");
+    logActivity("Publication annonce", null, message.slice(0,80));
+    await buildAnnoncePane();
+    await loadAnnouncement();
+  }catch(e){
+    errEl.textContent = "Échec : " + e.message;
+    errEl.style.display = "block";
+  }
+  btn.disabled = false; btn.textContent = "Publier l'annonce";
+});
+
+document.getElementById("btnDeactivateAnnonce").addEventListener("click", async ()=>{
+  const box = document.getElementById("annonceCurrentBox");
+  const id = box.dataset.id;
+  if(!id) return;
+  try{
+    const { error } = await sb.from("announcements").update({ active:false }).eq("id", id);
+    if(error) throw error;
+    showToast("Annonce désactivée.");
+    logActivity("Désactivation annonce", null, null);
+    await buildAnnoncePane();
+    await loadAnnouncement();
+  }catch(e){ showToast("Échec : " + e.message, 5000); }
+});
+
+// ======================================================================
 // ORDRES DE MISSION
 // ======================================================================
 const OM_STATUT_LABEL = { en_attente:"En attente", validee:"Validée", refusee:"Refusée" };
@@ -2919,6 +3100,33 @@ async function buildOMList(){
   }catch(e){
     status.textContent = "";
     body.innerHTML = `<tr><td colspan="10" style="color:#a11313;">Erreur : ${e.message}</td></tr>`;
+  }
+  updateOMBadge();
+}
+
+// Badge de notification sur l'onglet : nombre de demandes en attente (Manager/Admin)
+// ou d'ordres validés pas encore traités (Assistant RH).
+async function updateOMBadge(){
+  const badge = document.getElementById("omBadge");
+  if(!badge) return;
+  let count = 0;
+  try{
+    if(currentRole === "manager" || currentRole === "admin"){
+      const { count:c, error } = await sb.from("ordres_mission").select("id", { count:"exact", head:true }).eq("statut","en_attente");
+      if(!error) count = c || 0;
+    } else if(currentRole === "assistant_rh"){
+      const { count:c, error } = await sb.from("ordres_mission").select("id", { count:"exact", head:true }).eq("statut","validee").eq("traite", false);
+      if(!error) count = c || 0;
+    } else {
+      badge.style.display = "none";
+      return;
+    }
+  }catch(e){ return; }
+  if(count > 0){
+    badge.textContent = count > 99 ? "99+" : count;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
   }
 }
 
@@ -3579,7 +3787,11 @@ function applyRoleUI(){
   document.getElementById("tabAdmin").style.display = canSeeAdminTab ? "" : "none";
   document.getElementById("tabAdmin").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
   document.getElementById("adminTitle").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
-  document.getElementById("adminSubTabsBar").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubTabsBar").style.display = (currentRole === "admin" || currentRole === "manager") ? "" : "none";
+  document.getElementById("adminSubUsers").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubLog").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubWeights").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubAnnonce").style.display = (currentRole === "admin" || currentRole === "manager") ? "" : "none";
 
   if(isAssistantRH){
     // Accès strictement limité à l'onglet Ordres de mission (ordres validés uniquement, en lecture)
@@ -3623,6 +3835,12 @@ function setupRealtime(){
     .on("postgres_changes", {event:"*", schema:"public", table:"ordres_mission"}, ()=>{
       const omActive = document.getElementById("viewOM").classList.contains("active");
       if(omActive) buildOMList();
+      else updateOMBadge();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"announcements"}, ()=>{
+      loadAnnouncement();
+      const adminActive = document.getElementById("viewAdmin").classList.contains("active");
+      if(adminActive) buildAnnoncePane();
     })
     .subscribe();
 }
@@ -3721,6 +3939,8 @@ async function completeLogin(){
   recompute();
   applyRoleUI();
   setupRealtime();
+  updateOMBadge();
+  loadAnnouncement();
   logActivity("Connexion", null, null);
 }
 
