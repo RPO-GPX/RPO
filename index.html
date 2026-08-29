@@ -3620,6 +3620,10 @@ function setupRealtime(){
       const dashActive = document.getElementById("viewDashboard").classList.contains("active");
       if(dashActive) buildDashboard();
     })
+    .on("postgres_changes", {event:"*", schema:"public", table:"ordres_mission"}, ()=>{
+      const omActive = document.getElementById("viewOM").classList.contains("active");
+      if(omActive) buildOMList();
+    })
     .subscribe();
 }
 
