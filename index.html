@@ -649,7 +649,7 @@
       <div class="tabs" style="gap:2px;" id="adminSubTabsBar">
         <button class="subtab active" id="adminSubUsers" style="font-size:12.5px;padding:8px 14px;">Comptes utilisateurs</button>
         <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
-        <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Pondération des sections</button>
+        <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Sections</button>
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
         <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
       </div>
@@ -681,20 +681,21 @@
       </table>
     </div>
 
-    <!-- ---- Pondération des sections ---- -->
+    <!-- ---- Sections & points de contrôle ---- -->
     <div id="adminPaneWeights" style="display:none;">
-      <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 16px;">
-        La somme des poids doit être égale à 100%. Ce changement s'applique aux nouvelles visites
-        (les visites déjà enregistrées gardent le taux calculé au moment de leur clôture).
+      <p style="font-size:13px;color:var(--muted);max-width:680px;margin:0 0 14px;">
+        Ajoute, réordonne ou désactive des sections et leurs points de contrôle. La somme des poids
+        des sections actives doit être égale à 100%. Un changement s'applique aux nouvelles visites
+        (les visites déjà enregistrées gardent leur contenu et leur taux d'origine). Désactiver une
+        section ou un point ne le supprime pas : il disparaît du formulaire mais reste visible dans
+        l'historique.
       </p>
-      <table class="dash" id="adminWeightsTable" style="max-width:520px;">
-        <thead><tr><th>Section</th><th>Poids (%)</th></tr></thead>
-        <tbody id="adminWeightsBody"></tbody>
-      </table>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
-        <button class="btn primary" id="btnSaveWeights" style="padding:9px 16px;border-radius:8px;">Enregistrer la pondération</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn light" id="btnAddSection" style="padding:8px 14px;border-radius:8px;">+ Nouvelle section</button>
+        <button class="btn primary" id="btnSaveWeights" style="padding:9px 16px;border-radius:8px;">Enregistrer les modifications</button>
         <span id="adminWeightsStatus" style="font-size:12.5px;"></span>
       </div>
+      <div id="adminSectionsList"></div>
     </div>
 
     <!-- ---- Rapport mensuel ---- -->
@@ -956,7 +957,7 @@
 // ======================================================================
 // DONNÉES : sections, poids de criticité, items
 // ======================================================================
-const SECTIONS = [
+let SECTIONS = [
 { key:"administration", name:"Administration", weight:25, items:[
   ["01","Registre de commerce SPA original (avec les articles correspondant à l'activité réelle)"],
   ["02","Déclaration d'existence disponible"],
@@ -1175,18 +1176,47 @@ async function logActivity(action, target, details){
 }
 
 // ======================================================================
-// PONDÉRATION DES SECTIONS (modifiable par l'Admin)
+// SECTIONS ET POINTS DE CONTRÔLE (gérés dynamiquement par l'Admin)
 // ======================================================================
-async function loadSectionWeights(){
+// Copie brute de TOUTES les lignes (actives et désactivées) — utilisée par
+// le panneau Admin pour l'édition complète (réactivation possible).
+let checklistSectionsRaw = [];
+let checklistItemsRaw = [];
+
+async function fetchChecklistStructure(){
+  const { data: secData, error: secErr } = await sb.from("checklist_sections")
+    .select("id, section_key, name, weight, display_order, visible_dr, active")
+    .order("display_order");
+  const { data: itemData, error: itemErr } = await sb.from("checklist_items")
+    .select("id, section_id, item_number, label, is_subheader, display_order, active")
+    .order("display_order");
+  if(secErr || itemErr || !secData || !itemData) throw (secErr || itemErr || new Error("Réponse vide"));
+  checklistSectionsRaw = secData;
+  checklistItemsRaw = itemData;
+}
+
+// Reconstruit SECTIONS / DR_VISIBLE_SECTIONS / ITEM_INFO à partir des lignes actives
+function rebuildSectionsFromRaw(){
+  const activeSections = checklistSectionsRaw.filter(s=> s.active).sort((a,b)=> a.display_order-b.display_order);
+  if(!activeSections.length) return; // rien en base : on garde le tableau codé en dur par défaut
+  SECTIONS = activeSections.map(s=> ({
+    key: s.section_key,
+    name: s.name,
+    weight: Number(s.weight),
+    items: checklistItemsRaw
+      .filter(i=> i.section_id === s.id && i.active)
+      .sort((a,b)=> a.display_order-b.display_order)
+      .map(i=> [i.item_number, i.label])
+  }));
+  DR_VISIBLE_SECTIONS = activeSections.filter(s=> s.visible_dr).map(s=> s.section_key);
+  buildItemInfo();
+}
+
+async function loadChecklistStructure(){
   try{
-    const { data, error } = await sb.from("section_weights").select("section_key, weight");
-    if(error || !data) return;
-    const bySection = {};
-    data.forEach(row=> bySection[row.section_key] = Number(row.weight));
-    SECTIONS.forEach(sec=>{
-      if(bySection[sec.key] !== undefined) sec.weight = bySection[sec.key];
-    });
-  }catch(e){ console.warn("Pondération : chargement impossible, valeurs par défaut conservées.", e); }
+    await fetchChecklistStructure();
+    rebuildSectionsFromRaw();
+  }catch(e){ console.warn("Sections : chargement impossible, valeurs par défaut conservées.", e); }
 }
 
 // Appelle la fonction Edge "admin-users" (créations/modifications de comptes,
@@ -2038,15 +2068,32 @@ async function buildDashboard(){
 // ======================================================================
 // VUE DIRECTEUR RÉGIONAL — Points non conformes de sa région uniquement
 // ======================================================================
-const ITEM_INFO = {};
-SECTIONS.forEach(sec=>{
-  sec.items.forEach(([n, label])=>{
-    ITEM_INFO[itemId(sec.key, n)] = { sectionKey: sec.key, section: sec.name, label };
-  });
-});
+let ITEM_INFO = {};
+function buildItemInfo(){
+  ITEM_INFO = {};
+  if(checklistSectionsRaw.length){
+    // Construit à partir de TOUTES les sections/points (actifs ou non), pour que le libellé
+    // d'un point désactivé reste lisible dans l'historique des visites déjà enregistrées.
+    const secById = {};
+    checklistSectionsRaw.forEach(s=> secById[s.id] = s);
+    checklistItemsRaw.forEach(it=>{
+      const sec = secById[it.section_id];
+      if(!sec) return;
+      ITEM_INFO[itemId(sec.section_key, it.item_number)] = { sectionKey: sec.section_key, section: sec.name, label: it.label };
+    });
+  }else{
+    // Avant le premier chargement Supabase : construit à partir des données par défaut codées en dur
+    SECTIONS.forEach(sec=>{
+      sec.items.forEach(([n, label])=>{
+        ITEM_INFO[itemId(sec.key, n)] = { sectionKey: sec.key, section: sec.name, label };
+      });
+    });
+  }
+}
+buildItemInfo();
 
-// Le Directeur régional ne voit les non-conformités que pour ces sections
-const DR_VISIBLE_SECTIONS = ["administration", "rh", "commercial"];
+// Le Directeur régional ne voit les non-conformités que pour les sections marquées visible_dr
+let DR_VISIBLE_SECTIONS = ["administration", "rh", "commercial"];
 
 // Points non conformes d'une visite, restreints aux sections visibles par le DR
 function drVisiblePoints(rec){
@@ -2735,43 +2782,217 @@ function renderAdminLog(){
 document.getElementById("adminLogSearch").addEventListener("input", renderAdminLog);
 document.getElementById("btnRefreshLog").addEventListener("click", buildAdminLog);
 
-function buildAdminWeights(){
-  const body = document.getElementById("adminWeightsBody");
-  body.innerHTML = "";
-  SECTIONS.forEach(sec=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${sec.name}</td>
-      <td><input type="number" min="0" max="100" step="0.5" value="${sec.weight}" data-key="${sec.key}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>`;
-    body.appendChild(tr);
-  });
+// ======================================================================
+// ADMIN — GESTION DES SECTIONS ET DES POINTS DE CONTRÔLE
+// ======================================================================
+let adminNewSectionCounter = 0;
+let adminNewItemCounter = 0;
+
+function slugifySectionKey(name, existingKeys){
+  let base = (name||"section")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"")
+    .slice(0,24) || "section";
+  let key = base, n = 2;
+  while(existingKeys.includes(key)){ key = base + n; n++; }
+  return key;
 }
+
+async function buildAdminWeights(){
+  const statusEl = document.getElementById("adminWeightsStatus");
+  statusEl.textContent = "Chargement…";
+  statusEl.style.color = "var(--muted)";
+  try{ await fetchChecklistStructure(); }
+  catch(e){ statusEl.textContent = "Impossible de charger les sections — vérifie ta connexion."; statusEl.style.color="#a11313"; return; }
+  statusEl.textContent = "";
+  renderAdminSections();
+}
+
+function renderAdminSections(){
+  const list = document.getElementById("adminSectionsList");
+  list.innerHTML = "";
+  const sorted = [...checklistSectionsRaw].sort((a,b)=> a.display_order-b.display_order);
+  sorted.forEach(sec=> list.appendChild(renderSectionCard(sec)));
+}
+
+function renderSectionCard(sec){
+  const card = document.createElement("div");
+  card.className = "sec-admin-card";
+  card.dataset.sid = sec.id;
+  card.style = "border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;";
+  const items = checklistItemsRaw.filter(i=> i.section_id === sec.id).sort((a,b)=> a.display_order-b.display_order);
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f7f8fa;flex-wrap:wrap;">
+      <input data-f="name" value="${(sec.name||"").replace(/"/g,'&quot;')}" style="flex:1;min-width:160px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-weight:600;">
+      <span style="font-size:10.5px;color:var(--muted);">${sec.section_key}</span>
+      <label style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:4px;">Poids
+        <input data-f="weight" type="number" min="0" max="100" step="0.5" value="${sec.weight}" style="width:64px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">%
+      </label>
+      <label style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:4px;">Ordre
+        <input data-f="order" type="number" value="${sec.display_order}" style="width:52px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+      </label>
+      <label style="font-size:11.5px;display:flex;align-items:center;gap:4px;"><input data-f="visible_dr" type="checkbox" ${sec.visible_dr?"checked":""}> Visible DR</label>
+      <label style="font-size:11.5px;display:flex;align-items:center;gap:4px;"><input data-f="active" type="checkbox" ${sec.active?"checked":""}> Active</label>
+      <button type="button" class="btn light btn-toggle-items" style="padding:6px 10px;border-radius:6px;font-size:12px;">Points (${items.length}) ▾</button>
+    </div>
+    <div class="sec-items-wrap" style="display:none;padding:10px 12px;">
+      <table class="dash" style="font-size:12.5px;">
+        <thead><tr><th style="width:60px;">N°</th><th>Libellé</th><th style="width:70px;">Sous-titre</th><th style="width:60px;">Ordre</th><th style="width:60px;">Active</th></tr></thead>
+        <tbody class="sec-items-body"></tbody>
+      </table>
+      <button type="button" class="btn light btn-add-item" style="margin-top:8px;padding:6px 10px;border-radius:6px;font-size:12px;">+ Point de contrôle</button>
+    </div>`;
+  const itemsBody = card.querySelector(".sec-items-body");
+  items.forEach(it=> itemsBody.appendChild(renderItemRow(it)));
+
+  card.querySelector(".btn-toggle-items").addEventListener("click", (e)=>{
+    const wrap = card.querySelector(".sec-items-wrap");
+    const show = wrap.style.display === "none";
+    wrap.style.display = show ? "" : "none";
+    e.target.textContent = `Points (${itemsBody.children.length}) ${show?"▲":"▾"}`;
+  });
+  card.querySelector(".btn-add-item").addEventListener("click", ()=>{
+    adminNewItemCounter++;
+    const tr = renderItemRow({ id:"new-"+adminNewItemCounter, item_number:null, label:"", is_subheader:false, display_order: itemsBody.children.length+1, active:true }, true);
+    itemsBody.appendChild(tr);
+  });
+  return card;
+}
+
+function renderItemRow(it, isNew){
+  const tr = document.createElement("tr");
+  tr.dataset.iid = it.id;
+  tr.dataset.isNew = isNew ? "1" : "0";
+  const numDisplay = isNew ? `<span style="color:var(--muted);font-style:italic;">auto</span>` : (it.item_number==="__sub__" ? "—" : it.item_number);
+  tr.innerHTML = `
+    <td>${numDisplay}</td>
+    <td><input data-f="label" value="${(it.label||"").replace(/"/g,'&quot;')}" style="width:100%;padding:4px 6px;border:1px solid var(--line);border-radius:4px;font-size:12px;"></td>
+    <td style="text-align:center;"><input data-f="is_subheader" type="checkbox" ${it.is_subheader?"checked":""} ${isNew?"":"disabled"}></td>
+    <td><input data-f="order" type="number" value="${it.display_order}" style="width:48px;padding:4px 6px;border:1px solid var(--line);border-radius:4px;font-size:12px;"></td>
+    <td style="text-align:center;"><input data-f="active" type="checkbox" ${it.active?"checked":""}></td>`;
+  return tr;
+}
+
+document.getElementById("btnAddSection").addEventListener("click", ()=>{
+  adminNewSectionCounter++;
+  const tempId = "new-"+adminNewSectionCounter;
+  const sorted = [...checklistSectionsRaw];
+  const maxOrder = sorted.reduce((m,s)=> Math.max(m,s.display_order||0), 0);
+  const card = renderSectionCard({ id:tempId, section_key:"(auto)", name:"", weight:0, display_order:maxOrder+1, visible_dr:false, active:true });
+  document.getElementById("adminSectionsList").appendChild(card);
+  card.querySelector('[data-f="name"]').focus();
+});
+
 document.getElementById("btnSaveWeights").addEventListener("click", async ()=>{
   const statusEl = document.getElementById("adminWeightsStatus");
-  const inputs = [...document.querySelectorAll("#adminWeightsBody input[data-key]")];
-  const values = inputs.map(i=> ({ key:i.dataset.key, weight: Number(i.value) }));
-  const total = values.reduce((s,v)=> s + v.weight, 0);
-  if(Math.abs(total - 100) > 0.01){
-    statusEl.textContent = `La somme des poids est de ${total}% — elle doit être égale à 100%.`;
+  const cards = [...document.querySelectorAll(".sec-admin-card")];
+
+  const sectionRows = cards.map(card=>{
+    const sid = card.dataset.sid;
+    const raw = checklistSectionsRaw.find(s=> String(s.id)===String(sid));
+    return {
+      sid,
+      isNew: sid.startsWith("new-"),
+      section_key: raw ? raw.section_key : null,
+      name: card.querySelector('[data-f="name"]').value.trim(),
+      weight: Number(card.querySelector('[data-f="weight"]').value),
+      display_order: Number(card.querySelector('[data-f="order"]').value),
+      visible_dr: card.querySelector('[data-f="visible_dr"]').checked,
+      active: card.querySelector('[data-f="active"]').checked,
+      card
+    };
+  });
+
+  if(sectionRows.some(s=> !s.name)){
+    statusEl.textContent = "Chaque section doit avoir un nom.";
     statusEl.style.color = "#a11313";
     return;
   }
+  const activeTotal = sectionRows.filter(s=> s.active).reduce((s,v)=> s+v.weight, 0);
+  if(Math.abs(activeTotal - 100) > 0.01){
+    statusEl.textContent = `La somme des poids des sections actives est de ${activeTotal}% — elle doit être égale à 100%.`;
+    statusEl.style.color = "#a11313";
+    return;
+  }
+
   statusEl.textContent = "Enregistrement…";
   statusEl.style.color = "var(--muted)";
   try{
-    for(const v of values){
-      const { error } = await sb.from("section_weights")
-        .update({ weight:v.weight, updated_at:new Date().toISOString(), updated_by:currentUser.id })
-        .eq("section_key", v.key);
+    const existingKeys = checklistSectionsRaw.map(s=> s.section_key);
+    const newSections = sectionRows.filter(s=> s.isNew);
+    const existingSections = sectionRows.filter(s=> !s.isNew);
+
+    // 1) Sections existantes : une seule requête groupée (upsert) au lieu d'une par section
+    if(existingSections.length){
+      const { error } = await sb.from("checklist_sections").upsert(existingSections.map(s=> ({
+        id:s.sid, section_key:s.section_key, name:s.name, weight:s.weight, display_order:s.display_order,
+        visible_dr:s.visible_dr, active:s.active
+      })));
+      if(error) throw error;
+      existingSections.forEach(s=> s.realId = s.sid);
+    }
+    // Nouvelles sections : rares, insérées une par une pour récupérer leur id généré
+    for(const s of newSections){
+      const key = slugifySectionKey(s.name, existingKeys);
+      existingKeys.push(key);
+      const { data, error } = await sb.from("checklist_sections").insert({
+        section_key:key, name:s.name, weight:s.weight, display_order:s.display_order,
+        visible_dr:s.visible_dr, active:s.active
+      }).select("id").single();
+      if(error) throw error;
+      s.realId = data.id;
+    }
+
+    // 2) Points de contrôle : on regroupe toutes les lignes à mettre à jour en UNE requête,
+    // et toutes les lignes à insérer en UNE requête, au lieu d'une requête par point.
+    const itemsToUpdate = [];
+    const itemsToInsert = [];
+    for(const s of sectionRows){
+      const rows = [...s.card.querySelectorAll(".sec-items-body tr")];
+      for(const tr of rows){
+        const isNewItem = tr.dataset.isNew === "1";
+        const label = tr.querySelector('[data-f="label"]').value.trim();
+        if(!label) continue; // ligne vide ignorée
+        const isSub = tr.querySelector('[data-f="is_subheader"]').checked;
+        const order = Number(tr.querySelector('[data-f="order"]').value);
+        const active = tr.querySelector('[data-f="active"]').checked;
+        if(isNewItem){
+          const existingNums = checklistItemsRaw
+            .filter(i=> i.section_id === s.realId && i.item_number !== "__sub__")
+            .map(i=> parseInt(i.item_number,10)).filter(n=> !isNaN(n))
+            .concat(itemsToInsert.filter(x=> x.section_id===s.realId && x.item_number!=="__sub__").map(x=> parseInt(x.item_number,10)));
+          const nextNum = (existingNums.length ? Math.max(...existingNums) : 0) + 1;
+          const item_number = isSub ? "__sub__" : String(nextNum).padStart(2,"0");
+          itemsToInsert.push({ section_id:s.realId, item_number, label, is_subheader:isSub, display_order:order, active });
+        }else{
+          const raw = checklistItemsRaw.find(i=> String(i.id)===String(tr.dataset.iid));
+          itemsToUpdate.push({
+            id:tr.dataset.iid, label, display_order:order, active,
+            // colonnes NOT NULL inchangées, requises par upsert même en cas de simple mise à jour
+            section_id: raw ? raw.section_id : s.realId,
+            item_number: raw ? raw.item_number : null,
+            is_subheader: raw ? raw.is_subheader : false
+          });
+        }
+      }
+    }
+    if(itemsToUpdate.length){
+      // upsert sur les colonnes fournies uniquement (item_number/is_subheader/section_id non touchés, donc non requis)
+      const { error } = await sb.from("checklist_items").upsert(itemsToUpdate, { onConflict:"id" });
       if(error) throw error;
     }
-    values.forEach(v=>{
-      const sec = SECTIONS.find(s=> s.key === v.key);
-      if(sec) sec.weight = v.weight;
-    });
+    if(itemsToInsert.length){
+      const { error } = await sb.from("checklist_items").insert(itemsToInsert);
+      if(error) throw error;
+    }
+
+    await loadChecklistStructure();
     recompute();
-    statusEl.textContent = "Pondération enregistrée.";
+    renderAdminSections();
+    statusEl.textContent = "Modifications enregistrées.";
     statusEl.style.color = "#1c6b2e";
-    logActivity("Modification pondération", null, values.map(v=> v.key+":"+v.weight+"%").join(", "));
+    logActivity("Modification sections/points de contrôle", null, sectionRows.map(s=> s.name+":"+s.weight+"%").join(", "));
   }catch(e){
     statusEl.textContent = "Échec : " + e.message;
     statusEl.style.color = "#a11313";
@@ -3901,6 +4122,22 @@ function setupRealtime(){
       const annonceActive = document.getElementById("viewAnnonce").classList.contains("active");
       if(annonceActive) buildAnnoncePane("M");
     })
+    .on("postgres_changes", {event:"*", schema:"public", table:"checklist_sections"}, async ()=>{
+      await loadChecklistStructure();
+      buildSections();
+      recompute();
+      const adminActive = document.getElementById("viewAdmin").classList.contains("active");
+      const weightsSubActive = document.getElementById("adminPaneWeights").style.display !== "none";
+      if(adminActive && weightsSubActive) renderAdminSections();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"checklist_items"}, async ()=>{
+      await loadChecklistStructure();
+      buildSections();
+      recompute();
+      const adminActive = document.getElementById("viewAdmin").classList.contains("active");
+      const weightsSubActive = document.getElementById("adminPaneWeights").style.display !== "none";
+      if(adminActive && weightsSubActive) renderAdminSections();
+    })
     .subscribe();
 }
 
@@ -3993,7 +4230,7 @@ async function completeLogin(){
   document.getElementById("nameScreen").style.display = "none";
   fillAgenceList();
   bindHeader();
-  await loadSectionWeights();
+  await loadChecklistStructure();
   buildSections();
   recompute();
   applyRoleUI();
