@@ -1219,6 +1219,23 @@ async function loadChecklistStructure(){
   }catch(e){ console.warn("Sections : chargement impossible, valeurs par défaut conservées.", e); }
 }
 
+// Liste COMPLÈTE des sections et de leurs points (actifs ET désactivés), pour tout calcul
+// qui doit rester exact sur des visites déjà enregistrées (rapport mensuel, taux par section…).
+// Contrairement à SECTIONS (filtré aux éléments actifs, utilisé pour le formulaire de saisie),
+// celle-ci ne doit JAMAIS servir à construire le formulaire d'une nouvelle visite.
+function historicalSectionsList(){
+  if(!checklistSectionsRaw.length) return SECTIONS; // avant le premier chargement Supabase
+  return checklistSectionsRaw.map(s=> ({
+    key: s.section_key,
+    name: s.name,
+    weight: Number(s.weight),
+    items: checklistItemsRaw
+      .filter(i=> i.section_id === s.id)
+      .sort((a,b)=> a.display_order-b.display_order)
+      .map(i=> [i.item_number, i.label])
+  }));
+}
+
 // Appelle la fonction Edge "admin-users" (créations/modifications de comptes,
 // qui nécessitent la clé service_role côté serveur — jamais exposée au client).
 async function callAdminUsersFn(payload){
@@ -1261,7 +1278,8 @@ let state = {
   header:{ agence:"", date:"", superficie:"", employes:"", livreurs:"", securite:"",
     agentsCS:"", agentsPoly:"", colisExpedies:"", colisLivresCS:"", colisLivresLivreurs:"", commentaireGeneral:"" },
   status:{},   // id -> "conforme" | "nonconforme" | "na" | ""
-  anom:{}      // id -> texte
+  anom:{},     // id -> texte
+  frozen:null  // { closed, taux, appreciation } — présent seulement pour une visite déjà clôturée rechargée
 };
 let currentRecordId = null; // id de l'enregistrement permanent en cours (null tant que agence+date incomplets)
 
@@ -1373,7 +1391,10 @@ async function loadRecordById(id){
       colisExpedies:data.colis_expedies||"", colisLivresCS:data.colis_livres_cs||"", colisLivresLivreurs:data.colis_livres_livreurs||"",
       commentaireGeneral:data.commentaire_general||"" },
     status: data.statuts || {},
-    anom: data.anomalies || {}
+    anom: data.anomalies || {},
+    // Visite déjà clôturée : on garde le taux/appréciation calculés à l'époque, pour ne jamais
+    // les recalculer avec des poids ou des points qui ont pu changer depuis.
+    frozen: data.closed ? { closed:true, taux:data.taux, appreciation:data.appreciation } : null
   };
   currentRecordId = data.id;
 }
@@ -1579,24 +1600,35 @@ function overallStaffingBadgeHTML(staffing){
 function computeGlobals(){
   let sumW=0, sumWT=0, gConf=0, gNonConf=0;
   const rows = [];
-  SECTIONS.forEach(sec=>{
+  // Liste complète (actifs + désactivés) pour que les taux par section restent exacts
+  // sur une ancienne visite, même si des points ont été désactivés depuis.
+  historicalSectionsList().forEach(sec=>{
     const s = sectionStats(sec);
     gConf += s.conforme; gNonConf += s.nonconforme;
     if(s.taux!==null){ sumW += sec.weight; sumWT += s.taux*sec.weight; }
     rows.push({name:sec.name, key:sec.key, taux:s.taux});
   });
-  const weighted = sumW>0 ? sumWT/sumW : null;
+  let weighted = sumW>0 ? sumWT/sumW : null;
   const simple = (gConf+(2*gNonConf))>0 ? gConf/(gConf+(2*gNonConf)) : null;
   let appreciation = "n/a";
   if(weighted!==null){
     appreciation = weighted>=0.8 ? "CONFORME" : (weighted>=0.51 ? "À AMÉLIORER" : "NON CONFORME");
   }
+  // Visite déjà clôturée : le taux global/l'appréciation restent ceux calculés à la clôture,
+  // jamais recalculés avec les poids actuels des sections (qui ont pu changer depuis).
+  if(state.frozen && state.frozen.closed && state.frozen.taux != null){
+    weighted = state.frozen.taux;
+    appreciation = state.frozen.appreciation || appreciation;
+  }
+  // Construite en parcourant TOUTES les sections/points dans leur ordre d'affichage
+  // (actifs ou désactivés), pour que l'ordre reste celui du formulaire et qu'un point
+  // désactivé garde sa non-conformité visible dans l'imprimé des visites déjà enregistrées.
   const ncList = [];
-  SECTIONS.forEach(sec=>{
+  historicalSectionsList().forEach(sec=>{
     sec.items.forEach(([n,label])=>{
       if(n==="__sub__") return;
-      const id = itemId(sec.key,n);
-      if((state.status[id]||"")==="nonconforme"){
+      const id = itemId(sec.key, n);
+      if((state.status[id]||"") === "nonconforme"){
         ncList.push({section:sec.name, label, anom:state.anom[id]||""});
       }
     });
@@ -3066,7 +3098,9 @@ async function buildMonthlyReport(){
   const sectionAgg = {};
   visited.forEach(r=>{
     const statuts = r.statuts || {};
-    SECTIONS.forEach(sec=>{
+    // Liste complète (actifs + désactivés) pour que le rapport mensuel reste exact
+    // même si une section ou un point a été désactivé depuis la visite concernée.
+    historicalSectionsList().forEach(sec=>{
       const t = sectionTauxFromStatuts(sec, statuts);
       if(t==null) return;
       if(!sectionAgg[sec.key]) sectionAgg[sec.key] = { name: sec.name, sum:0, n:0 };
