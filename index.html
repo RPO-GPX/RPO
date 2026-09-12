@@ -831,7 +831,12 @@
         </label>
       </div>
       <table class="dash" id="volumetrieTable" style="max-width:640px;">
-        <thead><tr><th>Agence</th><th>Colis expédiés</th><th>Colis livrés</th><th>Taux de livraison</th></tr></thead>
+        <thead><tr>
+          <th data-sort="agence" style="cursor:pointer;">Agence <span class="volu-sort-arrow" data-arrow="agence"></span></th>
+          <th data-sort="colis_expedies" style="cursor:pointer;">Colis expédiés <span class="volu-sort-arrow" data-arrow="colis_expedies"></span></th>
+          <th data-sort="colis_livres" style="cursor:pointer;">Colis livrés <span class="volu-sort-arrow" data-arrow="colis_livres"></span></th>
+          <th data-sort="taux" style="cursor:pointer;">Taux de livraison <span class="volu-sort-arrow" data-arrow="taux"></span></th>
+        </tr></thead>
         <tbody id="volumetrieBody"></tbody>
         <tfoot id="volumetrieFoot"></tfoot>
       </table>
@@ -3608,6 +3613,8 @@ async function buildAdminVolumetrie(){
   renderVolumetrieComparatif();
 }
 
+let volumetrieSort = { col:"agence", dir:1 }; // dir: 1 = croissant, -1 = décroissant
+
 function renderVolumetrieTable(){
   const moisSelect = document.getElementById("volumetrieMoisFilter");
   const agenceSelect = document.getElementById("volumetrieAgenceFilter");
@@ -3617,11 +3624,26 @@ function renderVolumetrieTable(){
   const agenceFiltre = agenceSelect.value;
   const rows = volumetrieRaw
     .filter(r=> r.mois_label === mois && (!agenceFiltre || r.agence === agenceFiltre))
-    .sort((a,b)=> a.agence.localeCompare(b.agence));
+    .map(r=> ({...r, taux: r.colis_expedies>0 ? r.colis_livres/r.colis_expedies : null}));
+
+  const { col, dir } = volumetrieSort;
+  rows.sort((a,b)=>{
+    let va = a[col], vb = b[col];
+    if(col === "agence") return dir * va.localeCompare(vb);
+    // valeurs manquantes (taux n/a) toujours en dernier, quel que soit le sens du tri
+    if(va===null) return 1;
+    if(vb===null) return -1;
+    return dir * (va - vb);
+  });
+
+  document.querySelectorAll(".volu-sort-arrow").forEach(el=>{
+    el.textContent = (el.dataset.arrow === col) ? (dir===1 ? "▲" : "▼") : "";
+  });
+
   body.innerHTML = "";
   let totalExp = 0, totalLiv = 0;
   rows.forEach(r=>{
-    const taux = r.colis_expedies>0 ? r.colis_livres/r.colis_expedies : null;
+    const taux = r.taux;
     const [bg,fg] = taux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(taux);
     totalExp += r.colis_expedies; totalLiv += r.colis_livres;
     const tr = document.createElement("tr");
@@ -3638,6 +3660,14 @@ function renderVolumetrieTable(){
 
   renderVolumetrieTopFlop(mois);
 }
+document.querySelectorAll('#volumetrieTable th[data-sort]').forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const col = th.dataset.sort;
+    if(volumetrieSort.col === col) volumetrieSort.dir *= -1;
+    else volumetrieSort = { col, dir: col==="agence" ? 1 : -1 }; // volume/taux : décroissant par défaut (plus utile)
+    renderVolumetrieTable();
+  });
+});
 
 // Top 5 / Flop 5 agences du mois sélectionné, par volume de colis expédiés (indépendant du filtre agence)
 function renderVolumetrieTopFlop(mois){
