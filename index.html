@@ -667,6 +667,7 @@
         <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Sections</button>
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
         <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
+        <button class="subtab" id="adminSubVolumetrie" style="font-size:12.5px;padding:8px 14px;">Volumétrie colis</button>
       </div>
     </div>
 
@@ -800,6 +801,56 @@
       </div>
       <p id="annonceFormErrorA" style="display:none;color:#a11313;font-size:12.5px;margin:4px 0 10px;"></p>
       <button class="btn primary" id="btnPublishAnnonceA" style="padding:9px 16px;border-radius:8px;">Publier l'annonce</button>
+    </div>
+
+    <!-- ---- Volumétrie colis (sous-onglet Admin) ---- -->
+    <div id="adminPaneVolumetrie" style="display:none;">
+      <div id="volumetrieImportRow">
+        <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
+          Importe un fichier Excel avec des totaux déjà agrégés par agence (colonnes attendues :
+          <em>Mois</em>, <em>Agence</em>, <em>Colis expédiés</em>, <em>Colis livrés</em> — les noms de
+          colonnes proches sont reconnus automatiquement). Réimporter un mois déjà présent remplace ses
+          lignes sans toucher aux autres mois.
+        </p>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+          <label class="btn light" style="padding:8px 14px;border-radius:8px;cursor:pointer;">
+            Importer un fichier
+            <input type="file" id="volumetrieFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+          </label>
+          <span id="volumetrieImportStatus" style="font-size:12.5px;"></span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <label style="font-size:12.5px;color:var(--muted);">Mois
+          <select id="volumetrieMoisFilter" style="margin-left:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></select>
+        </label>
+        <label style="font-size:12.5px;color:var(--muted);">Agence
+          <select id="volumetrieAgenceFilter" style="margin-left:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+            <option value="">Toutes les agences</option>
+          </select>
+        </label>
+      </div>
+      <table class="dash" id="volumetrieTable" style="max-width:640px;">
+        <thead><tr><th>Agence</th><th>Colis expédiés</th><th>Colis livrés</th><th>Taux de livraison</th></tr></thead>
+        <tbody id="volumetrieBody"></tbody>
+        <tfoot id="volumetrieFoot"></tfoot>
+      </table>
+
+      <h3 style="font-size:14px;margin:28px 0 10px;">Comparatif sur plusieurs mois</h3>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <label style="font-size:12.5px;color:var(--muted);">Du mois
+          <select id="volumetrieCompFrom" style="margin-left:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></select>
+        </label>
+        <label style="font-size:12.5px;color:var(--muted);">Au mois
+          <select id="volumetrieCompTo" style="margin-left:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></select>
+        </label>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="dash" id="volumetrieCompTable" style="min-width:100%;">
+          <thead><tr id="volumetrieCompHead"></tr></thead>
+          <tbody id="volumetrieCompBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -1284,6 +1335,14 @@ const REGIONS = {
 };
 function agencesForRegion(region){
   return REGIONS[region] || [];
+}
+// Retrouve la région (Est/Ouest/Centre/Sud) d'une agence à partir de son nom tel qu'importé
+function regionOfAgence(agenceNom){
+  const norm = stripGuepexSuffix(agenceNom);
+  for(const region of Object.keys(REGIONS)){
+    if(REGIONS[region].some(a=> stripGuepexSuffix(a) === norm)) return region;
+  }
+  return null;
 }
 
 // ======================================================================
@@ -2620,6 +2679,7 @@ function switchView(name){
   if(name==="annonce") buildAnnoncePane("M");
   if(name==="admin"){
     if(currentRole === "manager" || currentRole === "directeur_general") adminSwitchSub("report");
+    if(currentRole === "directeur_regional") adminSwitchSub("volumetrie");
     else buildAdminUsers();
   }
 }
@@ -2639,22 +2699,26 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
   document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
   document.getElementById("adminPaneAnnonce").style.display = (name==="annonce") ? "" : "none";
+  document.getElementById("adminPaneVolumetrie").style.display = (name==="volumetrie") ? "" : "none";
   document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
   document.getElementById("adminSubReport").classList.toggle("active", name==="report");
   document.getElementById("adminSubAnnonce").classList.toggle("active", name==="annonce");
+  document.getElementById("adminSubVolumetrie").classList.toggle("active", name==="volumetrie");
   if(name==="users") buildAdminUsers();
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
   if(name==="report") initReportPane();
   if(name==="annonce") buildAnnoncePane("A");
+  if(name==="volumetrie") buildAdminVolumetrie();
 }
 document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
 document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
 document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
 document.getElementById("adminSubAnnonce").addEventListener("click", ()=> adminSwitchSub("annonce"));
+document.getElementById("adminSubVolumetrie").addEventListener("click", ()=> adminSwitchSub("volumetrie"));
 
 const ROLE_LABELS = {
   inspecteur:"Inspecteur (RPO)", manager:"Manager",
@@ -3390,6 +3454,292 @@ document.getElementById("btnDeactivateAnnonceA").addEventListener("click", ()=> 
 document.getElementById("btnDeactivateAnnonceM").addEventListener("click", ()=> deactivateAnnonce("M"));
 
 // ======================================================================
+// ADMIN — VOLUMÉTRIE COLIS (import Excel, totaux par mois/agence)
+// ======================================================================
+const MOIS_FR_NUM = { "janvier":1,"février":2,"fevrier":2,"mars":3,"avril":4,"mai":5,"juin":6,
+  "juillet":7,"août":8,"aout":8,"septembre":9,"octobre":10,"novembre":11,"décembre":12,"decembre":12 };
+
+function normalizeStr(s){
+  return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+}
+
+// Déduit une clé triable "AAAA-MM" à partir d'un libellé libre type "Septembre 2026"
+function moisLabelToKey(label){
+  const norm = normalizeStr(label);
+  const yearMatch = norm.match(/\d{4}/);
+  const year = yearMatch ? yearMatch[0] : "0000";
+  let month = "00";
+  for(const name of Object.keys(MOIS_FR_NUM)){
+    if(norm.includes(name)){ month = String(MOIS_FR_NUM[name]).padStart(2,"0"); break; }
+  }
+  return year+"-"+month;
+}
+
+function findColumn(headers, candidates){
+  const normHeaders = headers.map(h=> normalizeStr(h));
+  for(const cand of candidates){
+    const idx = normHeaders.findIndex(h=> h.includes(cand));
+    if(idx !== -1) return headers[idx];
+  }
+  return null;
+}
+
+let volumetrieRaw = [];
+
+async function parseVolumetrieFile(file){
+  const statusEl = document.getElementById("volumetrieImportStatus");
+  statusEl.textContent = "Lecture du fichier…";
+  statusEl.style.color = "var(--muted)";
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
+    if(!rows.length) throw new Error("Fichier vide.");
+
+    const headers = Object.keys(rows[0]);
+    const colMois = findColumn(headers, ["mois"]);
+    const colAgence = findColumn(headers, ["agence"]);
+    const colExp = findColumn(headers, ["colis expedie","expedie","exp total","exp"]);
+    const colLiv = findColumn(headers, ["colis livre","livre","liv total","liv"]);
+    if(!colMois || !colAgence || !colExp || !colLiv){
+      throw new Error("Colonnes introuvables — attendu : Mois, Agence, Colis expédiés, Colis livrés.");
+    }
+
+    const parsed = rows.map(r=> ({
+      mois_label: String(r[colMois]).trim(),
+      mois_key: moisLabelToKey(r[colMois]),
+      agence: String(r[colAgence]).trim(),
+      colis_expedies: Number(r[colExp]) || 0,
+      colis_livres: Number(r[colLiv]) || 0,
+      updated_at: new Date().toISOString(),
+      updated_by: currentUser.id
+    })).filter(r=> r.agence && r.mois_label); // ignore les lignes vides (ex. liste déroulante de référence)
+
+    if(!parsed.length) throw new Error("Aucune ligne exploitable trouvée.");
+
+    statusEl.textContent = "Enregistrement…";
+    const { error } = await sb.from("volumetrie_colis")
+      .upsert(parsed, { onConflict:"mois_label,agence" });
+    if(error) throw error;
+
+    statusEl.textContent = `${parsed.length} ligne(s) importée(s) avec succès.`;
+    statusEl.style.color = "#1c6b2e";
+    logActivity("Import volumétrie colis", null, `${parsed.length} lignes`);
+    await buildAdminVolumetrie();
+  }catch(e){
+    statusEl.textContent = "Échec de l'import : " + e.message;
+    statusEl.style.color = "#a11313";
+  }
+}
+
+document.getElementById("volumetrieFileInput").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(file) parseVolumetrieFile(file);
+  e.target.value = "";
+});
+
+// Vérifie si une agence (telle que nommée dans le fichier importé, ex. "Agence de Skikda [Guepex]"
+// ou "Agence Merouana (Guepex)" — les deux formats de suffixe existent dans les fichiers) appartient
+// à la région du Directeur régional connecté (comparaison insensible aux accents/majuscules).
+function stripGuepexSuffix(s){
+  return normalizeStr(s).replace(/[\[\(]\s*guepex\s*[\]\)]\s*$/,"").trim();
+}
+function agenceMatchesRegion(agenceNom, regionAgences){
+  const norm = stripGuepexSuffix(agenceNom);
+  return regionAgences.some(a=> stripGuepexSuffix(a) === norm);
+}
+
+async function buildAdminVolumetrie(){
+  const statusEl = document.getElementById("volumetrieImportStatus");
+  const { data, error } = await sb.from("volumetrie_colis").select("*").order("mois_key",{ascending:false});
+  if(error){ statusEl.textContent = "Chargement impossible : " + error.message; statusEl.style.color="#a11313"; return; }
+  volumetrieRaw = data || [];
+  if(currentRole === "directeur_regional" && currentUserRegion){
+    const regionAgences = agencesForRegion(currentUserRegion);
+    volumetrieRaw = volumetrieRaw.filter(r=> agenceMatchesRegion(r.agence, regionAgences));
+  }
+
+  const moisSelect = document.getElementById("volumetrieMoisFilter");
+  const prevMois = moisSelect.value;
+  const months = [...new Set(volumetrieRaw.map(r=> r.mois_label))]
+    .sort((a,b)=> moisLabelToKey(b).localeCompare(moisLabelToKey(a)));
+  moisSelect.innerHTML = months.map(m=> `<option value="${m}">${m}</option>`).join("");
+  if(months.includes(prevMois)) moisSelect.value = prevMois;
+
+  const agenceSelect = document.getElementById("volumetrieAgenceFilter");
+  const prevAgence = agenceSelect.value;
+  const agences = [...new Set(volumetrieRaw.map(r=> r.agence))].sort((a,b)=> a.localeCompare(b));
+  agenceSelect.innerHTML = `<option value="">Toutes les agences</option>` + agences.map(a=> `<option value="${a}">${a}</option>`).join("");
+  if(agences.includes(prevAgence)) agenceSelect.value = prevAgence;
+
+  // Comparatif : mois triés chronologiquement (ascendant) pour les sélecteurs "Du mois" / "Au mois"
+  const monthsAsc = [...months].sort((a,b)=> moisLabelToKey(a).localeCompare(moisLabelToKey(b)));
+  const fromSelect = document.getElementById("volumetrieCompFrom");
+  const toSelect = document.getElementById("volumetrieCompTo");
+  const prevFrom = fromSelect.value, prevTo = toSelect.value;
+  const optsHtml = monthsAsc.map(m=> `<option value="${m}">${m}</option>`).join("");
+  fromSelect.innerHTML = optsHtml;
+  toSelect.innerHTML = optsHtml;
+  if(monthsAsc.includes(prevFrom)) fromSelect.value = prevFrom;
+  else if(monthsAsc.length) fromSelect.value = monthsAsc[Math.max(0, monthsAsc.length-3)];
+  if(monthsAsc.includes(prevTo)) toSelect.value = prevTo;
+  else if(monthsAsc.length) toSelect.value = monthsAsc[monthsAsc.length-1];
+
+  renderVolumetrieTable();
+  renderVolumetrieComparatif();
+}
+
+function renderVolumetrieTable(){
+  const moisSelect = document.getElementById("volumetrieMoisFilter");
+  const agenceSelect = document.getElementById("volumetrieAgenceFilter");
+  const body = document.getElementById("volumetrieBody");
+  const foot = document.getElementById("volumetrieFoot");
+  const mois = moisSelect.value;
+  const agenceFiltre = agenceSelect.value;
+  const rows = volumetrieRaw
+    .filter(r=> r.mois_label === mois && (!agenceFiltre || r.agence === agenceFiltre))
+    .sort((a,b)=> a.agence.localeCompare(b.agence));
+  body.innerHTML = "";
+  let totalExp = 0, totalLiv = 0;
+  rows.forEach(r=>{
+    const taux = r.colis_expedies>0 ? r.colis_livres/r.colis_expedies : null;
+    const [bg,fg] = taux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(taux);
+    totalExp += r.colis_expedies; totalLiv += r.colis_livres;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.agence}</td><td>${r.colis_expedies}</td><td>${r.colis_livres}</td>
+      <td><span style="background:${bg};color:${fg};padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${taux===null?"n/a":Math.round(taux*100)+"%"}</span></td>`;
+    body.appendChild(tr);
+  });
+  const totalTaux = totalExp>0 ? totalLiv/totalExp : null;
+  const [tbg,tfg] = totalTaux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(totalTaux);
+  foot.innerHTML = rows.length ? `<tr style="font-weight:800;border-top:2px solid var(--line);">
+      <td>Total</td><td>${totalExp}</td><td>${totalLiv}</td>
+      <td><span style="background:${tbg};color:${tfg};padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${totalTaux===null?"n/a":Math.round(totalTaux*100)+"%"}</span></td>
+    </tr>` : "";
+}
+document.getElementById("volumetrieMoisFilter").addEventListener("change", renderVolumetrieTable);
+document.getElementById("volumetrieAgenceFilter").addEventListener("change", ()=>{ renderVolumetrieTable(); renderVolumetrieComparatif(); });
+
+function renderVolumetrieComparatif(){
+  const fromSelect = document.getElementById("volumetrieCompFrom");
+  const toSelect = document.getElementById("volumetrieCompTo");
+  const head = document.getElementById("volumetrieCompHead");
+  const body = document.getElementById("volumetrieCompBody");
+  if(!fromSelect.value || !toSelect.value){ head.innerHTML = ""; body.innerHTML = ""; return; }
+
+  const fromKey = moisLabelToKey(fromSelect.value);
+  const toKey = moisLabelToKey(toSelect.value);
+  const loKey = fromKey <= toKey ? fromKey : toKey;
+  const hiKey = fromKey <= toKey ? toKey : fromKey;
+
+  // Mois de la plage sélectionnée, triés chronologiquement
+  const allMonths = [...new Set(volumetrieRaw.map(r=> r.mois_label))];
+  const rangeMonths = allMonths
+    .filter(m=> moisLabelToKey(m) >= loKey && moisLabelToKey(m) <= hiKey)
+    .sort((a,b)=> moisLabelToKey(a).localeCompare(moisLabelToKey(b)));
+
+  // Historique complet trié (pour retrouver le mois précédant chaque mois, même hors plage)
+  const chronoAll = allMonths.sort((a,b)=> moisLabelToKey(a).localeCompare(moisLabelToKey(b)));
+
+  const agenceFiltre = document.getElementById("volumetrieAgenceFilter").value;
+  const agencesAll = [...new Set(volumetrieRaw.map(r=> r.agence))].sort((a,b)=> a.localeCompare(b));
+  const agences = agencesAll.filter(a=> !agenceFiltre || a === agenceFiltre);
+
+  // exp[agence][mois_label] = nombre de colis expédiés, ou null si absent
+  const exp = {};
+  agencesAll.forEach(a=> exp[a] = {});
+  volumetrieRaw.forEach(r=>{
+    if(!exp[r.agence]) return;
+    exp[r.agence][r.mois_label] = r.colis_expedies;
+  });
+
+  // Construit, pour un ensemble d'agences donné, le total par mois (null si aucune donnée ce mois-là)
+  function totalsFor(agenceList){
+    const totals = {};
+    rangeMonths.forEach(m=> totals[m] = null);
+    chronoAll.forEach(m=>{
+      let sum = 0, any = false;
+      agenceList.forEach(a=>{
+        const v = exp[a] && exp[a][m];
+        if(v !== null && v !== undefined){ sum += v; any = true; }
+      });
+      totals[m] = any ? sum : null;
+    });
+    return totals;
+  }
+
+  // Construit le HTML d'une ligne (agence, sous-total région, ou réseau global)
+  function buildRow(label, valuesByMonth, opts){
+    opts = opts || {};
+    const labelHtml = opts.toggle
+      ? `<span style="cursor:pointer;user-select:none;">
+           <span class="volu-chevron" style="display:inline-block;transition:transform .15s;margin-right:4px;">▶</span>${label}
+         </span>`
+      : label;
+    let cells = `<td style="${opts.bold?'font-weight:800;':''}">${labelHtml}</td>`;
+    rangeMonths.forEach((mois, idx)=>{
+      const v = valuesByMonth[mois];
+      const val = (v===null||v===undefined) ? "n/a" : v;
+      let arrow = "";
+      if(idx === rangeMonths.length-1 && v!==null && v!==undefined){
+        const prevIdx = chronoAll.indexOf(mois) - 1;
+        const prevMois = prevIdx >= 0 ? chronoAll[prevIdx] : null;
+        const prevV = prevMois ? valuesByMonth[prevMois] : null;
+        if(prevV !== null && prevV !== undefined){
+          if(v > prevV) arrow = ' <span style="color:#1c6b2e;">↑</span>';
+          else if(v < prevV) arrow = ' <span style="color:#a11313;">↓</span>';
+          else arrow = ' <span style="color:var(--muted);">→</span>';
+        }
+      }
+      cells += `<td><span style="background:${opts.bg||'var(--na-bg)'};color:var(--ink);padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${val}</span>${arrow}</td>`;
+    });
+    const rowAttr = opts.toggle ? `class="volu-region-row" data-region-toggle="${opts.toggle}"` : (opts.group ? `class="volu-detail-row" data-region-group="${opts.group}" style="display:none;"` : "");
+    return `<tr ${rowAttr}>${cells}</tr>`;
+  }
+
+  head.innerHTML = `<th>Agence</th>` + rangeMonths.map(m=> `<th>${m}</th>`).join("");
+
+  let html = "";
+  // Ligne "Réseau global" : total toutes agences confondues, indépendant du filtre agence
+  html += buildRow("Réseau global (toutes agences)", totalsFor(agencesAll), { bold:true, bg:"#dfe6f2" });
+
+  if(!agenceFiltre){
+    // Regroupement par région, replié par défaut : clique sur une région pour dérouler ses agences
+    Object.keys(REGIONS).forEach(region=>{
+      const agencesRegion = agences.filter(a=> regionOfAgence(a) === region);
+      if(!agencesRegion.length) return;
+      html += buildRow("Région "+region, totalsFor(agencesRegion), { bold:true, bg:"var(--warn-bg)", toggle:region });
+      agencesRegion.forEach(agence=>{
+        html += buildRow(agence, exp[agence], { group:region });
+      });
+    });
+    // Agences non rattachées à une région connue (sécurité, ne devrait normalement pas arriver)
+    const sansRegion = agences.filter(a=> !regionOfAgence(a));
+    if(sansRegion.length){
+      html += buildRow("Autres agences", totalsFor(sansRegion), { bold:true, bg:"var(--warn-bg)", toggle:"__autres__" });
+      sansRegion.forEach(agence=> html += buildRow(agence, exp[agence], { group:"__autres__" }));
+    }
+  }else{
+    agences.forEach(agence=> html += buildRow(agence, exp[agence]));
+  }
+
+  body.innerHTML = html;
+  body.querySelectorAll(".volu-region-row").forEach(tr=>{
+    tr.addEventListener("click", ()=>{
+      const region = tr.dataset.regionToggle;
+      const chevron = tr.querySelector(".volu-chevron");
+      const detailRows = body.querySelectorAll(`.volu-detail-row[data-region-group="${region}"]`);
+      const show = detailRows[0] && detailRows[0].style.display === "none";
+      detailRows.forEach(r=> r.style.display = show ? "" : "none");
+      if(chevron) chevron.style.transform = show ? "rotate(90deg)" : "rotate(0deg)";
+    });
+  });
+}
+document.getElementById("volumetrieCompFrom").addEventListener("change", renderVolumetrieComparatif);
+document.getElementById("volumetrieCompTo").addEventListener("change", renderVolumetrieComparatif);
+
+
 // ORDRES DE MISSION
 // ======================================================================
 const OM_STATUT_LABEL = { en_attente:"En attente", validee:"Validée", refusee:"Refusée" };
@@ -4108,15 +4458,18 @@ function applyRoleUI(){
   document.getElementById("tabOM").style.display = canSeeOMTab ? "" : "none";
   document.getElementById("btnNewOM").style.display = (currentRole === "inspecteur" || currentRole === "directeur_regional") ? "" : "none";
 
-  const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager" || currentRole === "directeur_general");
+  const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager" || currentRole === "directeur_general" || currentRole === "directeur_regional");
   document.getElementById("tabAdmin").style.display = canSeeAdminTab ? "" : "none";
-  document.getElementById("tabAdmin").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
-  document.getElementById("adminTitle").textContent = (currentRole === "admin") ? "Administration" : "Rapport mensuel";
-  document.getElementById("adminSubTabsBar").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("tabAdmin").textContent = (currentRole === "admin") ? "Administration" : (currentRole === "directeur_regional") ? "Volumétrie colis" : "Rapport mensuel";
+  document.getElementById("adminTitle").textContent = (currentRole === "admin") ? "Administration" : (currentRole === "directeur_regional") ? "Volumétrie colis" : "Rapport mensuel";
+  document.getElementById("adminSubTabsBar").style.display = canSeeAdminTab ? "" : "none";
   document.getElementById("adminSubUsers").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubLog").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubWeights").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubAnnonce").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubReport").style.display = (currentRole === "directeur_regional") ? "none" : "";
+  document.getElementById("adminSubVolumetrie").style.display = canSeeAdminTab ? "" : "none";
+  document.getElementById("volumetrieImportRow").style.display = (currentRole === "admin") ? "" : "none";
 
   document.getElementById("tabAnnonce").style.display = (currentRole === "manager") ? "" : "none";
 
