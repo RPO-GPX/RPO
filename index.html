@@ -836,6 +836,24 @@
         <tfoot id="volumetrieFoot"></tfoot>
       </table>
 
+      <h3 style="font-size:14px;margin:28px 0 10px;">Top / Flop agences du mois (volume expédié)</h3>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#1c6b2e;margin-bottom:6px;">Top 5</div>
+          <table class="dash" id="volumetrieTopTable" style="min-width:260px;">
+            <thead><tr><th>Agence</th><th>Colis expédiés</th></tr></thead>
+            <tbody id="volumetrieTopBody"></tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#a11313;margin-bottom:6px;">Flop 5</div>
+          <table class="dash" id="volumetrieFlopTable" style="min-width:260px;">
+            <thead><tr><th>Agence</th><th>Colis expédiés</th></tr></thead>
+            <tbody id="volumetrieFlopBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <h3 style="font-size:14px;margin:28px 0 10px;">Comparatif sur plusieurs mois</h3>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
         <label style="font-size:12.5px;color:var(--muted);">Du mois
@@ -3617,6 +3635,21 @@ function renderVolumetrieTable(){
       <td>Total</td><td>${totalExp}</td><td>${totalLiv}</td>
       <td><span style="background:${tbg};color:${tfg};padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${totalTaux===null?"n/a":Math.round(totalTaux*100)+"%"}</span></td>
     </tr>` : "";
+
+  renderVolumetrieTopFlop(mois);
+}
+
+// Top 5 / Flop 5 agences du mois sélectionné, par volume de colis expédiés (indépendant du filtre agence)
+function renderVolumetrieTopFlop(mois){
+  const topBody = document.getElementById("volumetrieTopBody");
+  const flopBody = document.getElementById("volumetrieFlopBody");
+  const rows = volumetrieRaw.filter(r=> r.mois_label === mois).sort((a,b)=> b.colis_expedies - a.colis_expedies);
+
+  function rowHtml(r){
+    return `<tr><td>${r.agence}</td><td>${r.colis_expedies}</td></tr>`;
+  }
+  topBody.innerHTML = rows.slice(0,5).map(rowHtml).join("") || `<tr><td colspan="2" style="color:var(--muted);">Aucune donnée</td></tr>`;
+  flopBody.innerHTML = rows.slice(-5).reverse().map(rowHtml).join("") || `<tr><td colspan="2" style="color:var(--muted);">Aucune donnée</td></tr>`;
 }
 document.getElementById("volumetrieMoisFilter").addEventListener("change", renderVolumetrieTable);
 document.getElementById("volumetrieAgenceFilter").addEventListener("change", ()=>{ renderVolumetrieTable(); renderVolumetrieComparatif(); });
