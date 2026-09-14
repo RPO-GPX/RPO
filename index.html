@@ -665,6 +665,7 @@
         <button class="subtab active" id="adminSubUsers" style="font-size:12.5px;padding:8px 14px;">Comptes utilisateurs</button>
         <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
         <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Sections</button>
+        <button class="subtab" id="adminSubAgences" style="font-size:12.5px;padding:8px 14px;">Agences</button>
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
         <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
         <button class="subtab" id="adminSubVolumetrie" style="font-size:12.5px;padding:8px 14px;">Volumétrie colis</button>
@@ -712,6 +713,24 @@
         <span id="adminWeightsStatus" style="font-size:12.5px;"></span>
       </div>
       <div id="adminSectionsList"></div>
+    </div>
+
+    <!-- ---- Agences ---- -->
+    <div id="adminPaneAgences" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
+        Ajoute, renomme, réaffecte à une autre région, ou désactive une agence. Désactiver une agence
+        ne la supprime pas : elle disparaît des listes de sélection mais reste lisible dans l'historique
+        des visites et de la volumétrie déjà enregistrées.
+      </p>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn light" id="btnAddAgence" style="padding:8px 14px;border-radius:8px;">+ Nouvelle agence</button>
+        <button class="btn primary" id="btnSaveAgences" style="padding:9px 16px;border-radius:8px;">Enregistrer les modifications</button>
+        <span id="adminAgencesStatus" style="font-size:12.5px;"></span>
+      </div>
+      <table class="dash" id="adminAgencesTable" style="max-width:640px;">
+        <thead><tr><th>Nom</th><th style="width:110px;">Région</th><th style="width:70px;">Active</th></tr></thead>
+        <tbody id="adminAgencesBody"></tbody>
+      </table>
     </div>
 
     <!-- ---- Rapport mensuel ---- -->
@@ -1342,15 +1361,15 @@ async function callAdminUsersFn(payload){
   return json;
 }
 // ======================================================================
-const AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
+let AGENCES = ["Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Birtouta", "Agence de Ouled Fayet", "Sacré-Cœur", "Agence de Zeralda", "Cité Djamel", "Agence de Bab El Oued", "Agence du CHU Route de Tazoult", "Agence de Bordj Menaiel", "Agence de Sidi Brahim", "Agence Koléa", "Agence de Baraki", "Agence de Aïn Benian", "Agence de Khemis Miliana", "Agence de Berhoum", "Agence de Taher", "Agence de El Milia", "Agence de Boufarik", "Agence de Bab Dzair", "Agence de El Bouni", "Agence de Beni Saf", "Agence de Aïn Oulmene", "Agence BBA Nouveau Lycée", "Agence de El Harrouch", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tizi Gheniff", "Agence de Chlef", "Agence d'El Khroub", "Agence de Draâ Ben Khedda", "Agence Boudouaou", "Agence Mouzaia Blida", "Agence de Azzaba", "Agence Sidi Mabrouk", "Agence de Oued Zenati", "Agence de Bekkar", "Agence de El Kseur", "Agence de Tlemcen (Bel-Air)", "Agence El Hidhab", "Agence de Collo", "Agence de Arzew", "Agence Cheria (Tébessa)", "Agence de Sour El Ghouzlane", "Agence de Ghardaïa Thenia", "Agence de Aïn Defla", "Kharouba", "Agence de Skikda Faubourg", "Agence Cherchell", "Agence de Barika", "Agence de Mecheria", "Agence de Tolga", "Agence Ras El Oued", "Agence Centre ville", "Agence Ain Bessem", "Agence de Bougaa", "Agence Sidi Aïssa", "Agence Nouvelle Ville", "Agence de Béjaïa (Cité Tobal)", "Agence de Médéa (Pole Urbain)", "Agence de Ténès", "Agence Ferdjioua", "Agence Merouana", "Agence BOUKADIR", "Agence de Djamaa", "Agence Berrouaghia", "Agence MARAVAL", "Agence de Tamanrasset (Gataâ El Oued)", "Agence de Illizi", "Agence de Ouargla Centre Ville", "Agence In Amenas", "Agence de Djanet"];
 
 // ======================================================================
-// RÉGIONS (pour le rôle Directeur régional)
-// Remarque : "Agence de Oued Zenati" n'était présente dans aucune des 4 listes
-// fournies — rattachée par défaut à la région Est (cohérent avec le macro-
-// découpage Centre/Est/Ouest/Sud déjà utilisé ailleurs). À ajuster si besoin.
+// AGENCES ET RÉGIONS (gérées dynamiquement par l'Admin, sous-onglet "Agences")
+// La liste et les valeurs ci-dessus ne servent que de repli si Supabase est
+// injoignable au premier chargement — le contenu réel vient de la table `agences`.
 // ======================================================================
-const REGIONS = {
+let agencesRaw = []; // toutes les lignes (actives et désactivées), pour la gestion Admin
+let REGIONS = {
   "Est": ["Agence BBA Nouveau Lycée", "Agence Ras El Oued", "Agence Centre ville", "Agence de Aïn Oulmene", "Agence de Bougaa", "Agence El Hidhab", "Agence de El Bouni", "Agence de Sidi Brahim", "Agence de Barika", "Agence du CHU Route de Tazoult", "Agence Merouana", "Agence d'El Khroub", "Agence Nouvelle Ville", "Agence Sidi Mabrouk", "Agence de El Milia", "Agence de Taher", "Agence de Berhoum", "Agence Sidi Aïssa", "Agence Ferdjioua", "Agence de Azzaba", "Agence de Collo", "Agence de El Harrouch", "Agence de Skikda Faubourg", "Agence Cheria (Tébessa)", "Agence de Oued Zenati"],
   "Ouest": ["Agence de Aïn Defla", "Agence de Khemis Miliana", "Agence de Chlef", "Agence de Ténès", "Agence BOUKADIR", "Agence de Beni Saf", "Kharouba", "Agence de Mecheria", "Agence de Arzew", "Cité Djamel", "Agence MARAVAL", "Agence Sidi Bel Abbès (Benhamouda)", "Agence de Tlemcen (Bel-Air)"],
   "Centre": ["Agence de Aïn Benian", "Agence de Bab El Oued", "Sacré-Cœur", "Agence de Zeralda", "Agence de Dar El Beida (La Zone)", "Agence de Draria", "Agence de Ouled Fayet", "Agence de Baraki", "Agence de Birtouta", "Agence de Béjaïa (Cité Tobal)", "Agence de El Kseur", "Agence de Bab Dzair", "Agence de Boufarik", "Agence Mouzaia Blida", "Agence de Sour El Ghouzlane", "Agence Boudouaou", "Agence de Bordj Menaiel", "Agence de Médéa (Pole Urbain)", "Agence Berrouaghia", "Agence Cherchell", "Agence Koléa", "Agence de Bekkar", "Agence de Draâ Ben Khedda", "Agence de Tizi Gheniff", "Agence Ain Bessem"],
@@ -1366,6 +1385,26 @@ function regionOfAgence(agenceNom){
     if(REGIONS[region].some(a=> stripGuepexSuffix(a) === norm)) return region;
   }
   return null;
+}
+
+async function fetchAgencesStructure(){
+  const { data, error } = await sb.from("agences").select("id, nom, region, active").order("nom");
+  if(error || !data) throw (error || new Error("Réponse vide"));
+  agencesRaw = data;
+}
+function rebuildAgencesFromRaw(){
+  const active = agencesRaw.filter(a=> a.active);
+  if(!active.length) return; // rien en base : on garde les valeurs par défaut codées en dur
+  AGENCES = active.map(a=> a.nom).sort((a,b)=> a.localeCompare(b));
+  const newRegions = { "Est":[], "Ouest":[], "Centre":[], "Sud":[] };
+  active.forEach(a=>{ if(newRegions[a.region]) newRegions[a.region].push(a.nom); });
+  REGIONS = newRegions;
+}
+async function loadAgencesStructure(){
+  try{
+    await fetchAgencesStructure();
+    rebuildAgencesFromRaw();
+  }catch(e){ console.warn("Agences : chargement impossible, valeurs par défaut conservées.", e); }
 }
 
 // ======================================================================
@@ -2720,18 +2759,21 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneUsers").style.display = (name==="users") ? "" : "none";
   document.getElementById("adminPaneLog").style.display = (name==="log") ? "" : "none";
   document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
+  document.getElementById("adminPaneAgences").style.display = (name==="agences") ? "" : "none";
   document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
   document.getElementById("adminPaneAnnonce").style.display = (name==="annonce") ? "" : "none";
   document.getElementById("adminPaneVolumetrie").style.display = (name==="volumetrie") ? "" : "none";
   document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
+  document.getElementById("adminSubAgences").classList.toggle("active", name==="agences");
   document.getElementById("adminSubReport").classList.toggle("active", name==="report");
   document.getElementById("adminSubAnnonce").classList.toggle("active", name==="annonce");
   document.getElementById("adminSubVolumetrie").classList.toggle("active", name==="volumetrie");
   if(name==="users") buildAdminUsers();
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
+  if(name==="agences") buildAdminAgences();
   if(name==="report") initReportPane();
   if(name==="annonce") buildAnnoncePane("A");
   if(name==="volumetrie") buildAdminVolumetrie();
@@ -2739,6 +2781,7 @@ function adminSwitchSub(name){
 document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
 document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
+document.getElementById("adminSubAgences").addEventListener("click", ()=> adminSwitchSub("agences"));
 document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
 document.getElementById("adminSubAnnonce").addEventListener("click", ()=> adminSwitchSub("annonce"));
 document.getElementById("adminSubVolumetrie").addEventListener("click", ()=> adminSwitchSub("volumetrie"));
@@ -3127,6 +3170,96 @@ document.getElementById("btnSaveWeights").addEventListener("click", async ()=>{
     statusEl.textContent = "Modifications enregistrées.";
     statusEl.style.color = "#1c6b2e";
     logActivity("Modification sections/points de contrôle", null, sectionRows.map(s=> s.name+":"+s.weight+"%").join(", "));
+  }catch(e){
+    statusEl.textContent = "Échec : " + e.message;
+    statusEl.style.color = "#a11313";
+  }
+});
+
+// ======================================================================
+// ADMIN — GESTION DES AGENCES (nom, région, actif)
+// ======================================================================
+let adminNewAgenceCounter = 0;
+
+async function buildAdminAgences(){
+  const statusEl = document.getElementById("adminAgencesStatus");
+  statusEl.textContent = "Chargement…";
+  statusEl.style.color = "var(--muted)";
+  try{ await fetchAgencesStructure(); }
+  catch(e){ statusEl.textContent = "Impossible de charger les agences — vérifie ta connexion."; statusEl.style.color="#a11313"; return; }
+  statusEl.textContent = "";
+  renderAdminAgences();
+}
+
+function renderAdminAgences(){
+  const body = document.getElementById("adminAgencesBody");
+  body.innerHTML = "";
+  const sorted = [...agencesRaw].sort((a,b)=> a.nom.localeCompare(b.nom));
+  sorted.forEach(a=> body.appendChild(renderAgenceRow(a)));
+}
+
+function renderAgenceRow(a, isNew){
+  const tr = document.createElement("tr");
+  tr.dataset.aid = a.id;
+  const regions = ["Est","Ouest","Centre","Sud"];
+  tr.innerHTML = `
+    <td><input data-f="nom" value="${(a.nom||"").replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>
+    <td><select data-f="region" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+      ${regions.map(r=> `<option value="${r}" ${a.region===r?"selected":""}>${r}</option>`).join("")}
+    </select></td>
+    <td style="text-align:center;"><input data-f="active" type="checkbox" ${a.active?"checked":""}></td>`;
+  return tr;
+}
+
+document.getElementById("btnAddAgence").addEventListener("click", ()=>{
+  adminNewAgenceCounter++;
+  const tempId = "new-"+adminNewAgenceCounter;
+  const tr = renderAgenceRow({ id:tempId, nom:"", region:"Est", active:true }, true);
+  document.getElementById("adminAgencesBody").appendChild(tr);
+  tr.querySelector('[data-f="nom"]').focus();
+});
+
+document.getElementById("btnSaveAgences").addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("adminAgencesStatus");
+  const rows = [...document.querySelectorAll("#adminAgencesBody tr")];
+
+  const parsed = rows.map(tr=>{
+    const aid = tr.dataset.aid;
+    return {
+      aid,
+      isNew: aid.startsWith("new-"),
+      nom: tr.querySelector('[data-f="nom"]').value.trim(),
+      region: tr.querySelector('[data-f="region"]').value,
+      active: tr.querySelector('[data-f="active"]').checked
+    };
+  }).filter(r=> r.nom); // ignore les lignes vides (ex. nouvelle ligne laissée sans nom)
+
+  const noms = parsed.map(r=> r.nom.toLowerCase());
+  if(new Set(noms).size !== noms.length){
+    statusEl.textContent = "Deux agences ne peuvent pas porter le même nom.";
+    statusEl.style.color = "#a11313";
+    return;
+  }
+
+  statusEl.textContent = "Enregistrement…";
+  statusEl.style.color = "var(--muted)";
+  try{
+    const toUpdate = parsed.filter(r=> !r.isNew).map(r=> ({ id:r.aid, nom:r.nom, region:r.region, active:r.active }));
+    const toInsert = parsed.filter(r=> r.isNew).map(r=> ({ nom:r.nom, region:r.region, active:r.active }));
+    if(toUpdate.length){
+      const { error } = await sb.from("agences").upsert(toUpdate);
+      if(error) throw error;
+    }
+    if(toInsert.length){
+      const { error } = await sb.from("agences").insert(toInsert);
+      if(error) throw error;
+    }
+    await loadAgencesStructure();
+    fillAgenceList();
+    renderAdminAgences();
+    statusEl.textContent = "Modifications enregistrées.";
+    statusEl.style.color = "#1c6b2e";
+    logActivity("Modification agences", null, parsed.map(r=> r.nom+" ("+r.region+")").join(", "));
   }catch(e){
     statusEl.textContent = "Échec : " + e.message;
     statusEl.style.color = "#a11313";
@@ -4529,6 +4662,7 @@ function applyRoleUI(){
   document.getElementById("adminSubUsers").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubLog").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubWeights").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubAgences").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubAnnonce").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubReport").style.display = (currentRole === "directeur_regional") ? "none" : "";
   document.getElementById("adminSubVolumetrie").style.display = canSeeAdminTab ? "" : "none";
@@ -4602,6 +4736,17 @@ function setupRealtime(){
       const adminActive = document.getElementById("viewAdmin").classList.contains("active");
       const weightsSubActive = document.getElementById("adminPaneWeights").style.display !== "none";
       if(adminActive && weightsSubActive) renderAdminSections();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"agences"}, async ()=>{
+      await loadAgencesStructure();
+      fillAgenceList();
+      const adminActive = document.getElementById("viewAdmin").classList.contains("active");
+      const agencesSubActive = document.getElementById("adminPaneAgences") && document.getElementById("adminPaneAgences").style.display !== "none";
+      if(adminActive && agencesSubActive) renderAdminAgences();
+      // Rejoue les vues qui dépendent des régions/agences si elles sont ouvertes
+      if(document.getElementById("adminPaneVolumetrie") && document.getElementById("adminPaneVolumetrie").style.display !== "none"){
+        buildAdminVolumetrie();
+      }
     })
     .subscribe();
 }
@@ -4693,8 +4838,9 @@ function askForName(){
 async function completeLogin(){
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("nameScreen").style.display = "none";
-  fillAgenceList();
   bindHeader();
+  await loadAgencesStructure();
+  fillAgenceList();
   await loadChecklistStructure();
   buildSections();
   recompute();
