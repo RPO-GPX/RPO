@@ -1378,9 +1378,27 @@ let REGIONS = {
 function agencesForRegion(region){
   return REGIONS[region] || [];
 }
-// Retrouve la région (Est/Ouest/Centre/Sud) d'une agence à partir de son nom tel qu'importé
+// Version "historique" : renvoie TOUTES les agences d'une région (actives ET désactivées).
+// À utiliser partout où on affiche/agrège de l'historique déjà enregistré (dashboards,
+// analyse, évolution, volumétrie) — jamais pour construire un formulaire de nouvelle saisie,
+// qui doit rester sur agencesForRegion() (actives uniquement).
+function agencesForRegionAll(region){
+  if(!agencesRaw.length) return agencesForRegion(region); // repli avant premier chargement
+  return agencesRaw.filter(a=> a.region === region).map(a=> a.nom);
+}
+// Liste COMPLÈTE des agences (actives ET désactivées) — pendant historique de AGENCES
+// (qui lui reste filtré aux agences actives, pour la création de nouvelles visites).
+function allAgenceNames(){
+  return agencesRaw.length ? agencesRaw.map(a=> a.nom) : AGENCES;
+}
+// Retrouve la région (Est/Ouest/Centre/Sud) d'une agence à partir de son nom tel qu'importé,
+// en cherchant parmi TOUTES les agences (actives et désactivées) pour rester exact sur l'historique.
 function regionOfAgence(agenceNom){
   const norm = stripGuepexSuffix(agenceNom);
+  if(agencesRaw.length){
+    const found = agencesRaw.find(a=> stripGuepexSuffix(a.nom) === norm);
+    return found ? found.region : null;
+  }
   for(const region of Object.keys(REGIONS)){
     if(REGIONS[region].some(a=> stripGuepexSuffix(a) === norm)) return region;
   }
@@ -2161,7 +2179,7 @@ async function buildDashboard(){
   const byAgence = {};
   Object.keys(byAgenceSorted).forEach(key=>{ byAgence[key] = byAgenceSorted[key][0]; });
 
-  const rows = AGENCES.map(name=>{
+  const rows = allAgenceNames().map(name=>{
     const rec = byAgence[name.trim().toLowerCase()];
     return { name, rec };
   });
@@ -2291,7 +2309,7 @@ async function buildRegionAnomalies(){
     return;
   }
 
-  const scopedAgences = agencesForRegion(currentUserRegion);
+  const scopedAgences = agencesForRegionAll(currentUserRegion);
 
   // seules les visites approuvées par le Manager sont visibles au DR
   const approvedOnly = all.filter(rec=> rec.approved === true);
@@ -3201,6 +3219,7 @@ function renderAdminAgences(){
 function renderAgenceRow(a, isNew){
   const tr = document.createElement("tr");
   tr.dataset.aid = a.id;
+  tr.dataset.originalNom = a.nom || "";
   const regions = ["Est","Ouest","Centre","Sud"];
   tr.innerHTML = `
     <td><input data-f="nom" value="${(a.nom||"").replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>
@@ -3228,6 +3247,7 @@ document.getElementById("btnSaveAgences").addEventListener("click", async ()=>{
     return {
       aid,
       isNew: aid.startsWith("new-"),
+      originalNom: tr.dataset.originalNom || "",
       nom: tr.querySelector('[data-f="nom"]').value.trim(),
       region: tr.querySelector('[data-f="region"]').value,
       active: tr.querySelector('[data-f="active"]').checked
@@ -3240,6 +3260,10 @@ document.getElementById("btnSaveAgences").addEventListener("click", async ()=>{
     statusEl.style.color = "#a11313";
     return;
   }
+
+  // Renommages détectés : à propager à l'historique (visites + volumétrie) pour que
+  // l'agence garde tout son historique au lieu de repartir de zéro sous son nouveau nom.
+  const renames = parsed.filter(r=> !r.isNew && r.originalNom && r.originalNom !== r.nom);
 
   statusEl.textContent = "Enregistrement…";
   statusEl.style.color = "var(--muted)";
@@ -3254,10 +3278,24 @@ document.getElementById("btnSaveAgences").addEventListener("click", async ()=>{
       const { error } = await sb.from("agences").insert(toInsert);
       if(error) throw error;
     }
+
+    let renameCount = 0;
+    for(const r of renames){
+      const { error: e1, count: c1 } = await sb.from("visites")
+        .update({ agence: r.nom }, { count:"exact" }).eq("agence", r.originalNom);
+      if(e1) throw e1;
+      const { error: e2, count: c2 } = await sb.from("volumetrie_colis")
+        .update({ agence: r.nom }, { count:"exact" }).eq("agence", r.originalNom);
+      if(e2) throw e2;
+      renameCount += (c1||0) + (c2||0);
+    }
+
     await loadAgencesStructure();
     fillAgenceList();
     renderAdminAgences();
-    statusEl.textContent = "Modifications enregistrées.";
+    statusEl.textContent = renames.length
+      ? `Modifications enregistrées (historique mis à jour sur ${renameCount} ligne(s) suite au renommage).`
+      : "Modifications enregistrées.";
     statusEl.style.color = "#1c6b2e";
     logActivity("Modification agences", null, parsed.map(r=> r.nom+" ("+r.region+")").join(", "));
   }catch(e){
@@ -3317,7 +3355,7 @@ async function buildMonthlyReport(){
     if(!byAgence[key] || (r.date||"") > (byAgence[key].date||"")) byAgence[key] = r;
   });
   const visited = Object.values(byAgence);
-  const totalAgences = AGENCES.length;
+  const totalAgences = allAgenceNames().length;
 
   const withTaux = visited.filter(r=> r.taux != null);
   const avgTaux = withTaux.length ? withTaux.reduce((s,r)=> s+r.taux, 0) / withTaux.length : null;
@@ -3712,7 +3750,7 @@ async function buildAdminVolumetrie(){
   if(error){ statusEl.textContent = "Chargement impossible : " + error.message; statusEl.style.color="#a11313"; return; }
   volumetrieRaw = data || [];
   if(currentRole === "directeur_regional" && currentUserRegion){
-    const regionAgences = agencesForRegion(currentUserRegion);
+    const regionAgences = agencesForRegionAll(currentUserRegion);
     volumetrieRaw = volumetrieRaw.filter(r=> agenceMatchesRegion(r.agence, regionAgences));
   }
 
@@ -4248,8 +4286,8 @@ function initEvolutionView(){
   const select = document.getElementById("evolAgenceSelect");
   if(!evolutionInitDone){
     const agences = (currentRole === "directeur_regional" && currentUserRegion)
-      ? agencesForRegion(currentUserRegion)
-      : AGENCES;
+      ? agencesForRegionAll(currentUserRegion)
+      : allAgenceNames();
     const sorted = [...agences].sort((a,b)=> a.localeCompare(b, "fr"));
     sorted.forEach(name=>{
       const opt = document.createElement("option");
@@ -4414,7 +4452,7 @@ async function buildAnalyse(){
 
   if(isDR) all = all.filter(rec=> rec.approved === true);
 
-  const scopedAgences = isDR ? agencesForRegion(currentUserRegion) : AGENCES;
+  const scopedAgences = isDR ? agencesForRegionAll(currentUserRegion) : allAgenceNames();
   const byAgenceSorted = groupVisitesByAgence(all);
 
   // agrège : id de point -> { section, label, agences: Set }
