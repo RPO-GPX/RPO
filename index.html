@@ -669,6 +669,7 @@
         <button class="subtab" id="adminSubLog" style="font-size:12.5px;padding:8px 14px;">Journal d'activité</button>
         <button class="subtab" id="adminSubWeights" style="font-size:12.5px;padding:8px 14px;">Sections</button>
         <button class="subtab" id="adminSubAgences" style="font-size:12.5px;padding:8px 14px;">Agences</button>
+        <button class="subtab" id="adminSubAppreciations" style="font-size:12.5px;padding:8px 14px;">Appréciations</button>
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
         <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
         <button class="subtab" id="adminSubVolumetrie" style="font-size:12.5px;padding:8px 14px;">Volumétrie colis</button>
@@ -733,6 +734,25 @@
       <table class="dash" id="adminAgencesTable" style="max-width:640px;">
         <thead><tr><th>Nom</th><th style="width:110px;">Région</th><th style="width:70px;">Active</th></tr></thead>
         <tbody id="adminAgencesBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ---- Appréciations ---- -->
+    <div id="adminPaneAppreciations" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
+        Définis les paliers du barème d'appréciation : à partir de quel pourcentage un taux
+        est classé dans chaque niveau. Le niveau le plus bas doit toujours commencer à 0%.
+        Un changement ne s'applique qu'aux nouvelles visites — l'appréciation d'une visite déjà
+        clôturée reste figée telle qu'elle a été calculée.
+      </p>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn light" id="btnAddTier" style="padding:8px 14px;border-radius:8px;">+ Nouveau niveau</button>
+        <button class="btn primary" id="btnSaveTiers" style="padding:9px 16px;border-radius:8px;">Enregistrer les modifications</button>
+        <span id="adminTiersStatus" style="font-size:12.5px;"></span>
+      </div>
+      <table class="dash" id="adminTiersTable" style="max-width:560px;">
+        <thead><tr><th>Libellé</th><th style="width:110px;">Seuil min. (%)</th><th style="width:120px;">Couleur</th><th style="width:50px;"></th></tr></thead>
+        <tbody id="adminTiersBody"></tbody>
       </table>
     </div>
 
@@ -1812,19 +1832,19 @@ function recompute(){
   document.getElementById("fabTaux").textContent = weighted===null?"–":Math.round(weighted*100)+"%";
 
   const apprEl = document.getElementById("tbAppr");
-  // "À AMÉLIORER" est conservé : c'est l'ancien libellé stocké sur les visites clôturées
-  // avant la refonte du barème, il doit rester lisible dans l'historique.
-  const apprMap = {
-    "CONFORME":["Conforme","appr-conforme"],
-    "ACCEPTABLE":["Acceptable","appr-acceptable"],
-    "INSUFFISANT":["Insuffisant","appr-insuffisant"],
-    "À AMÉLIORER":["À améliorer","appr-ameliorer"],
-    "NON CONFORME":["Non conforme","appr-nonconforme"],
-    "n/a":["–","appr-na"]
-  };
-  const [apprText, apprClass] = apprMap[appreciation] || apprMap["n/a"];
-  apprEl.textContent = apprText;
-  apprEl.className = "appr-badge "+apprClass;
+  if(appreciation === "n/a"){
+    apprEl.textContent = "–";
+    apprEl.className = "appr-badge appr-na";
+  }else{
+    // "À AMÉLIORER" reste géré à part : ancien libellé encore stocké sur des visites
+    // clôturées avant la refonte du barème, non présent dans le barème actuel.
+    const st = apprStyleFromLabel(appreciation);
+    const tier = APPR_TIERS.find(t=> t.label === appreciation);
+    apprEl.textContent = tier ? tier.short : (appreciation === "À AMÉLIORER" ? "À améliorer" : appreciation);
+    apprEl.className = "appr-badge";
+    apprEl.style.background = st.bgHex;
+    apprEl.style.color = st.hex;
+  }
 
   document.getElementById("fabNc").textContent = ncList.length+" non conforme"+(ncList.length>1?"s":"");
 
@@ -1832,21 +1852,51 @@ function recompute(){
 }
 
 // ======================================================================
-// BARÈME D'APPRÉCIATION (source unique de vérité pour tous les affichages)
-//   0 – 50 %  : NON CONFORME
-//  51 – 69 %  : INSUFFISANT
-//  70 – 84 %  : ACCEPTABLE
-//  85 % et +  : CONFORME
+// BARÈME D'APPRÉCIATION (géré dynamiquement par l'Admin, sous-onglet "Appréciations")
+// Valeurs ci-dessous = repli si Supabase est injoignable au premier chargement —
+// le contenu réel vient de la table `appreciation_tiers`.
 // La classification se fait sur le pourcentage arrondi, pour qu'un taux affiché
 // "51 %" soit toujours classé comme 51 % (et non 50,6 % en interne).
 // ======================================================================
-const APPR_TIERS = [
-  { min:85, key:"conforme",    label:"CONFORME",     short:"Conforme",     bg:"var(--ok-bg)",   fg:"var(--ok-fg)",   bgHex:"#e3f3e6", hex:"#1c6b2e" },
-  { min:70, key:"acceptable",  label:"ACCEPTABLE",   short:"Acceptable",   bg:"var(--acc-bg)",  fg:"var(--acc-fg)",  bgHex:"#e4eef8", hex:"#1f5c96" },
-  { min:51, key:"insuffisant", label:"INSUFFISANT",  short:"Insuffisant",  bg:"var(--warn-bg)", fg:"var(--warn-fg)", bgHex:"#fdf1d6", hex:"#8a5a00" },
-  { min:0,  key:"nonconforme", label:"NON CONFORME", short:"Non conforme", bg:"var(--bad-bg)",  fg:"var(--bad-fg)",  bgHex:"#fbe3e3", hex:"#a11313" }
+const PALETTE_COULEURS = {
+  vert:   { bg:"var(--ok-bg)",   fg:"var(--ok-fg)",   bgHex:"#e3f3e6", hex:"#1c6b2e" },
+  bleu:   { bg:"var(--acc-bg)",  fg:"var(--acc-fg)",  bgHex:"#e4eef8", hex:"#1f5c96" },
+  orange: { bg:"var(--warn-bg)", fg:"var(--warn-fg)", bgHex:"#fdf1d6", hex:"#8a5a00" },
+  rouge:  { bg:"var(--bad-bg)",  fg:"var(--bad-fg)",  bgHex:"#fbe3e3", hex:"#a11313" },
+  gris:   { bg:"var(--na-bg)",   fg:"var(--na-fg)",   bgHex:"#eceef0", hex:"#5a5f66" }
+};
+function titleCaseFr(s){
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+function buildTier(seuil_min, label, color_name){
+  const c = PALETTE_COULEURS[color_name] || PALETTE_COULEURS.gris;
+  return { min:seuil_min, label, short:titleCaseFr(label), color_name, ...c };
+}
+let APPR_TIERS = [
+  buildTier(85, "CONFORME", "vert"),
+  buildTier(70, "ACCEPTABLE", "bleu"),
+  buildTier(51, "INSUFFISANT", "orange"),
+  buildTier(0, "NON CONFORME", "rouge")
 ];
-const SEUIL_CONFORME = 0.85; // seuil "objectif" utilisé par le rapport mensuel
+let SEUIL_CONFORME = 0.85; // seuil "objectif" utilisé par le rapport mensuel = plus haut palier du barème
+
+let appreciationTiersRaw = [];
+async function fetchAppreciationTiers(){
+  const { data, error } = await sb.from("appreciation_tiers").select("*").order("seuil_min", {ascending:false});
+  if(error || !data) throw (error || new Error("Réponse vide"));
+  appreciationTiersRaw = data;
+}
+function rebuildApprTiersFromRaw(){
+  if(!appreciationTiersRaw.length) return; // rien en base : on garde le repli codé en dur
+  APPR_TIERS = appreciationTiersRaw.map(t=> buildTier(t.seuil_min, t.label, t.color_name));
+  SEUIL_CONFORME = APPR_TIERS[0].min / 100; // plus haut palier = objectif "atteint"
+}
+async function loadAppreciationTiers(){
+  try{
+    await fetchAppreciationTiers();
+    rebuildApprTiersFromRaw();
+  }catch(e){ console.warn("Barème d'appréciation : chargement impossible, valeurs par défaut conservées.", e); }
+}
 
 function apprTier(t){
   if(t===null||t===undefined) return null;
@@ -2816,6 +2866,7 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneLog").style.display = (name==="log") ? "" : "none";
   document.getElementById("adminPaneWeights").style.display = (name==="weights") ? "" : "none";
   document.getElementById("adminPaneAgences").style.display = (name==="agences") ? "" : "none";
+  document.getElementById("adminPaneAppreciations").style.display = (name==="appreciations") ? "" : "none";
   document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
   document.getElementById("adminPaneAnnonce").style.display = (name==="annonce") ? "" : "none";
   document.getElementById("adminPaneVolumetrie").style.display = (name==="volumetrie") ? "" : "none";
@@ -2823,6 +2874,7 @@ function adminSwitchSub(name){
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
   document.getElementById("adminSubAgences").classList.toggle("active", name==="agences");
+  document.getElementById("adminSubAppreciations").classList.toggle("active", name==="appreciations");
   document.getElementById("adminSubReport").classList.toggle("active", name==="report");
   document.getElementById("adminSubAnnonce").classList.toggle("active", name==="annonce");
   document.getElementById("adminSubVolumetrie").classList.toggle("active", name==="volumetrie");
@@ -2830,6 +2882,7 @@ function adminSwitchSub(name){
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
   if(name==="agences") buildAdminAgences();
+  if(name==="appreciations") buildAdminAppreciations();
   if(name==="report") initReportPane();
   if(name==="annonce") buildAnnoncePane("A");
   if(name==="volumetrie") buildAdminVolumetrie();
@@ -2838,6 +2891,7 @@ document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwi
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
 document.getElementById("adminSubWeights").addEventListener("click", ()=> adminSwitchSub("weights"));
 document.getElementById("adminSubAgences").addEventListener("click", ()=> adminSwitchSub("agences"));
+document.getElementById("adminSubAppreciations").addEventListener("click", ()=> adminSwitchSub("appreciations"));
 document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
 document.getElementById("adminSubAnnonce").addEventListener("click", ()=> adminSwitchSub("annonce"));
 document.getElementById("adminSubVolumetrie").addEventListener("click", ()=> adminSwitchSub("volumetrie"));
@@ -3336,6 +3390,118 @@ document.getElementById("btnSaveAgences").addEventListener("click", async ()=>{
       : "Modifications enregistrées.";
     statusEl.style.color = "#1c6b2e";
     logActivity("Modification agences", null, parsed.map(r=> r.nom+" ("+r.region+")").join(", "));
+  }catch(e){
+    statusEl.textContent = "Échec : " + e.message;
+    statusEl.style.color = "#a11313";
+  }
+});
+
+// ======================================================================
+// ADMIN — GESTION DU BARÈME D'APPRÉCIATION (seuils, libellés, couleurs)
+// ======================================================================
+let adminNewTierCounter = 0;
+
+async function buildAdminAppreciations(){
+  const statusEl = document.getElementById("adminTiersStatus");
+  statusEl.textContent = "Chargement…";
+  statusEl.style.color = "var(--muted)";
+  try{ await fetchAppreciationTiers(); }
+  catch(e){ statusEl.textContent = "Impossible de charger le barème — vérifie ta connexion."; statusEl.style.color="#a11313"; return; }
+  statusEl.textContent = "";
+  renderAdminAppreciations();
+}
+
+function renderAdminAppreciations(){
+  const body = document.getElementById("adminTiersBody");
+  body.innerHTML = "";
+  const sorted = [...appreciationTiersRaw].sort((a,b)=> b.seuil_min - a.seuil_min);
+  sorted.forEach(t=> body.appendChild(renderTierRow(t)));
+}
+
+function renderTierRow(t, isNew){
+  const tr = document.createElement("tr");
+  tr.dataset.tid = t.id;
+  const couleurs = ["vert","bleu","orange","rouge","gris"];
+  tr.innerHTML = `
+    <td><input data-f="label" value="${(t.label||"").replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>
+    <td><input data-f="seuil_min" type="number" min="0" max="100" value="${t.seuil_min}" style="width:70px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;"></td>
+    <td><select data-f="color_name" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+      ${couleurs.map(c=> `<option value="${c}" ${t.color_name===c?"selected":""}>${titleCaseFr(c)}</option>`).join("")}
+    </select></td>
+    <td style="text-align:center;"><button type="button" class="btn-del-tier" title="Supprimer" style="border:none;background:none;color:#a11313;cursor:pointer;font-size:15px;">✕</button></td>`;
+  tr.querySelector(".btn-del-tier").addEventListener("click", ()=> tr.remove());
+  return tr;
+}
+
+document.getElementById("btnAddTier").addEventListener("click", ()=>{
+  adminNewTierCounter++;
+  const tr = renderTierRow({ id:"new-"+adminNewTierCounter, label:"", seuil_min:0, color_name:"gris" });
+  document.getElementById("adminTiersBody").appendChild(tr);
+  tr.querySelector('[data-f="label"]').focus();
+});
+
+document.getElementById("btnSaveTiers").addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("adminTiersStatus");
+  const rows = [...document.querySelectorAll("#adminTiersBody tr")];
+
+  const parsed = rows.map(tr=>{
+    const tid = tr.dataset.tid;
+    return {
+      tid,
+      isNew: tid.startsWith("new-"),
+      label: tr.querySelector('[data-f="label"]').value.trim(),
+      seuil_min: Number(tr.querySelector('[data-f="seuil_min"]').value),
+      color_name: tr.querySelector('[data-f="color_name"]').value
+    };
+  }).filter(r=> r.label); // ignore les lignes vides
+
+  if(!parsed.length){
+    statusEl.textContent = "Le barème doit contenir au moins un niveau.";
+    statusEl.style.color = "#a11313";
+    return;
+  }
+  if(!parsed.some(r=> r.seuil_min === 0)){
+    statusEl.textContent = "Un niveau doit obligatoirement commencer à 0% (pour couvrir tous les taux).";
+    statusEl.style.color = "#a11313";
+    return;
+  }
+  const seuils = parsed.map(r=> r.seuil_min);
+  if(new Set(seuils).size !== seuils.length){
+    statusEl.textContent = "Deux niveaux ne peuvent pas avoir le même seuil minimum.";
+    statusEl.style.color = "#a11313";
+    return;
+  }
+  if(seuils.some(s=> s<0 || s>100)){
+    statusEl.textContent = "Le seuil doit être compris entre 0 et 100.";
+    statusEl.style.color = "#a11313";
+    return;
+  }
+
+  statusEl.textContent = "Enregistrement…";
+  statusEl.style.color = "var(--muted)";
+  try{
+    const existingIds = parsed.filter(r=> !r.isNew).map(r=> r.tid);
+    const toDelete = appreciationTiersRaw.filter(t=> !existingIds.includes(t.id)).map(t=> t.id);
+    if(toDelete.length){
+      const { error } = await sb.from("appreciation_tiers").delete().in("id", toDelete);
+      if(error) throw error;
+    }
+    const toUpdate = parsed.filter(r=> !r.isNew).map(r=> ({ id:r.tid, label:r.label, seuil_min:r.seuil_min, color_name:r.color_name }));
+    const toInsert = parsed.filter(r=> r.isNew).map(r=> ({ label:r.label, seuil_min:r.seuil_min, color_name:r.color_name }));
+    if(toUpdate.length){
+      const { error } = await sb.from("appreciation_tiers").upsert(toUpdate);
+      if(error) throw error;
+    }
+    if(toInsert.length){
+      const { error } = await sb.from("appreciation_tiers").insert(toInsert);
+      if(error) throw error;
+    }
+    await loadAppreciationTiers();
+    recompute();
+    renderAdminAppreciations();
+    statusEl.textContent = "Barème enregistré.";
+    statusEl.style.color = "#1c6b2e";
+    logActivity("Modification barème d'appréciation", null, parsed.map(r=> r.label+" ≥"+r.seuil_min+"%").join(", "));
   }catch(e){
     statusEl.textContent = "Échec : " + e.message;
     statusEl.style.color = "#a11313";
@@ -4740,6 +4906,7 @@ function applyRoleUI(){
   document.getElementById("adminSubLog").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubWeights").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubAgences").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("adminSubAppreciations").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubAnnonce").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubReport").style.display = (currentRole === "directeur_regional") ? "none" : "";
   document.getElementById("adminSubVolumetrie").style.display = canSeeAdminTab ? "" : "none";
@@ -4824,6 +4991,13 @@ function setupRealtime(){
       if(document.getElementById("adminPaneVolumetrie") && document.getElementById("adminPaneVolumetrie").style.display !== "none"){
         buildAdminVolumetrie();
       }
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"appreciation_tiers"}, async ()=>{
+      await loadAppreciationTiers();
+      recompute();
+      const adminActive = document.getElementById("viewAdmin").classList.contains("active");
+      const apprSubActive = document.getElementById("adminPaneAppreciations") && document.getElementById("adminPaneAppreciations").style.display !== "none";
+      if(adminActive && apprSubActive) renderAdminAppreciations();
     })
     .subscribe();
 }
@@ -4918,6 +5092,7 @@ async function completeLogin(){
   bindHeader();
   await loadAgencesStructure();
   fillAgenceList();
+  await loadAppreciationTiers();
   await loadChecklistStructure();
   buildSections();
   recompute();
