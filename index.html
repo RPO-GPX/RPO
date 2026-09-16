@@ -16,6 +16,7 @@
     --ink:#1a1a1a;
     --muted:#6b6f76;
     --ok-bg:#e3f3e6; --ok-fg:#1c6b2e;
+    --acc-bg:#e4eef8; --acc-fg:#1f5c96;
     --warn-bg:#fdf1d6; --warn-fg:#8a5a00;
     --bad-bg:#fbe3e3; --bad-fg:#a11313;
     --na-bg:#eceef0; --na-fg:#5a5f66;
@@ -65,6 +66,8 @@
     text-transform:uppercase;
   }
   .appr-conforme{ background:var(--ok-bg); color:var(--ok-fg); }
+  .appr-acceptable{ background:var(--acc-bg); color:var(--acc-fg); }
+  .appr-insuffisant{ background:var(--warn-bg); color:var(--warn-fg); }
   .appr-ameliorer{ background:var(--warn-bg); color:var(--warn-fg); }
   .appr-nonconforme{ background:var(--bad-bg); color:var(--bad-fg); }
   .appr-na{ background:rgba(255,255,255,.12); color:#fff; }
@@ -1766,7 +1769,7 @@ function computeGlobals(){
   const simple = (gConf+(2*gNonConf))>0 ? gConf/(gConf+(2*gNonConf)) : null;
   let appreciation = "n/a";
   if(weighted!==null){
-    appreciation = weighted>=0.8 ? "CONFORME" : (weighted>=0.51 ? "À AMÉLIORER" : "NON CONFORME");
+    appreciation = apprTier(weighted).label;
   }
   // Visite déjà clôturée : le taux global/l'appréciation restent ceux calculés à la clôture,
   // jamais recalculés avec les poids actuels des sections (qui ont pu changer depuis).
@@ -1809,8 +1812,17 @@ function recompute(){
   document.getElementById("fabTaux").textContent = weighted===null?"–":Math.round(weighted*100)+"%";
 
   const apprEl = document.getElementById("tbAppr");
-  const apprMap = {"CONFORME":["Conforme","appr-conforme"], "À AMÉLIORER":["À améliorer","appr-ameliorer"], "NON CONFORME":["Non conforme","appr-nonconforme"], "n/a":["–","appr-na"]};
-  const [apprText, apprClass] = apprMap[appreciation];
+  // "À AMÉLIORER" est conservé : c'est l'ancien libellé stocké sur les visites clôturées
+  // avant la refonte du barème, il doit rester lisible dans l'historique.
+  const apprMap = {
+    "CONFORME":["Conforme","appr-conforme"],
+    "ACCEPTABLE":["Acceptable","appr-acceptable"],
+    "INSUFFISANT":["Insuffisant","appr-insuffisant"],
+    "À AMÉLIORER":["À améliorer","appr-ameliorer"],
+    "NON CONFORME":["Non conforme","appr-nonconforme"],
+    "n/a":["–","appr-na"]
+  };
+  const [apprText, apprClass] = apprMap[appreciation] || apprMap["n/a"];
   apprEl.textContent = apprText;
   apprEl.className = "appr-badge "+apprClass;
 
@@ -1819,10 +1831,39 @@ function recompute(){
   return {weighted, rows, ncList, appreciation};
 }
 
+// ======================================================================
+// BARÈME D'APPRÉCIATION (source unique de vérité pour tous les affichages)
+//   0 – 50 %  : NON CONFORME
+//  51 – 69 %  : INSUFFISANT
+//  70 – 84 %  : ACCEPTABLE
+//  85 % et +  : CONFORME
+// La classification se fait sur le pourcentage arrondi, pour qu'un taux affiché
+// "51 %" soit toujours classé comme 51 % (et non 50,6 % en interne).
+// ======================================================================
+const APPR_TIERS = [
+  { min:85, key:"conforme",    label:"CONFORME",     short:"Conforme",     bg:"var(--ok-bg)",   fg:"var(--ok-fg)",   bgHex:"#e3f3e6", hex:"#1c6b2e" },
+  { min:70, key:"acceptable",  label:"ACCEPTABLE",   short:"Acceptable",   bg:"var(--acc-bg)",  fg:"var(--acc-fg)",  bgHex:"#e4eef8", hex:"#1f5c96" },
+  { min:51, key:"insuffisant", label:"INSUFFISANT",  short:"Insuffisant",  bg:"var(--warn-bg)", fg:"var(--warn-fg)", bgHex:"#fdf1d6", hex:"#8a5a00" },
+  { min:0,  key:"nonconforme", label:"NON CONFORME", short:"Non conforme", bg:"var(--bad-bg)",  fg:"var(--bad-fg)",  bgHex:"#fbe3e3", hex:"#a11313" }
+];
+const SEUIL_CONFORME = 0.85; // seuil "objectif" utilisé par le rapport mensuel
+
+function apprTier(t){
+  if(t===null||t===undefined) return null;
+  const p = Math.round(t*100);
+  return APPR_TIERS.find(tier=> p >= tier.min) || APPR_TIERS[APPR_TIERS.length-1];
+}
+// Couleurs d'impression à partir du libellé d'appréciation ("À AMÉLIORER" = ancien
+// libellé encore stocké sur les visites clôturées avant la refonte du barème).
+function apprStyleFromLabel(label){
+  if(label === "À AMÉLIORER") return { bgHex:"#fdf1d6", hex:"#8a5a00" };
+  const tier = APPR_TIERS.find(t=> t.label === label);
+  return tier ? { bgHex:tier.bgHex, hex:tier.hex } : { bgHex:"#eee", hex:"#333" };
+}
+
 function tierColors(t){
-  if(t>=0.8) return ["var(--ok-bg)","var(--ok-fg)"];
-  if(t>=0.51) return ["var(--warn-bg)","var(--warn-fg)"];
-  return ["var(--bad-bg)","var(--bad-fg)"];
+  const tier = apprTier(t);
+  return tier ? [tier.bg, tier.fg] : ["var(--na-bg)","var(--na-fg)"];
 }
 
 // ======================================================================
@@ -1842,7 +1883,7 @@ function generateReference(){
 }
 
 function buildPrintView(){
-  const {weighted, rows, ncList} = recompute();
+  const {weighted, rows, ncList, appreciation} = recompute();
   document.getElementById("pvReference").textContent = generateReference();
   document.getElementById("pvDate").textContent = state.header.date || "-";
   document.getElementById("pvAgence").textContent = state.header.agence || "-";
@@ -1864,9 +1905,11 @@ function buildPrintView(){
   const apprEl = document.getElementById("pvAppr");
   let apprText="–", bg="#eee", fg="#333";
   if(weighted!==null){
-    if(weighted>=0.8){ apprText="CONFORME"; bg="#e3f3e6"; fg="#1c6b2e"; }
-    else if(weighted>=0.51){ apprText="À AMÉLIORER"; bg="#fdf1d6"; fg="#8a5a00"; }
-    else { apprText="NON CONFORME"; bg="#fbe3e3"; fg="#a11313"; }
+    // On reprend l'appréciation renvoyée par recompute() : pour une visite déjà clôturée
+    // c'est celle figée à la clôture, donc l'imprimé reste fidèle à l'historique.
+    apprText = appreciation;
+    const st = apprStyleFromLabel(appreciation);
+    bg = st.bgHex; fg = st.hex;
   }
   apprEl.textContent = apprText;
   apprEl.style.background = bg; apprEl.style.color = fg;
@@ -1900,16 +1943,13 @@ function buildPrintView(){
 // TABLEAU DE BORD MULTI-AGENCES
 // ======================================================================
 function tierTagStyle(taux){
-  if(taux===null||taux===undefined) return "background:#eceef0;color:#5a5f66;";
-  if(taux>=0.8) return "background:var(--ok-bg);color:var(--ok-fg);";
-  if(taux>=0.51) return "background:var(--warn-bg);color:var(--warn-fg);";
-  return "background:var(--bad-bg);color:var(--bad-fg);";
+  const tier = apprTier(taux);
+  if(!tier) return "background:#eceef0;color:#5a5f66;";
+  return `background:${tier.bg};color:${tier.fg};`;
 }
 function tierBarColor(taux){
-  if(taux===null||taux===undefined) return "#9aa1ab";
-  if(taux>=0.8) return "#1c6b2e";
-  if(taux>=0.51) return "#8a5a00";
-  return "#a11313";
+  const tier = apprTier(taux);
+  return tier ? tier.hex : "#9aa1ab";
 }
 // Construit un petit graphique en barres horizontales (SVG, sans dépendance externe).
 // rows: [{label, value(0-1), color}], value affiché en %.
@@ -1937,10 +1977,8 @@ function horizontalBarChartSVG(rows, opts){
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px;display:block;font-family:var(--sans);">${bars}</svg>`;
 }
 function apprLabel(taux){
-  if(taux===null||taux===undefined) return "–";
-  if(taux>=0.8) return "Conforme";
-  if(taux>=0.51) return "À améliorer";
-  return "Non conforme";
+  const tier = apprTier(taux);
+  return tier ? tier.short : "–";
 }
 
 // Regroupe les visites par agence, triées de la plus récente à la plus ancienne.
@@ -3361,7 +3399,7 @@ async function buildMonthlyReport(){
   const avgTaux = withTaux.length ? withTaux.reduce((s,r)=> s+r.taux, 0) / withTaux.length : null;
   const ranking = [...withTaux].sort((a,b)=> b.taux - a.taux);
 
-  const OBJECTIF = 0.8; // même seuil que l'appréciation "Conforme" (apprLabel)
+  const OBJECTIF = SEUIL_CONFORME; // même seuil que l'appréciation "Conforme" (apprLabel)
   const objectifAtteint = withTaux.filter(r=> r.taux >= OBJECTIF).length;
   const sousObjectif = withTaux
     .filter(r=> r.taux < OBJECTIF)
@@ -4343,7 +4381,7 @@ async function buildEvolutionChart(agenceName){
   document.getElementById("evolStatCount").textContent = visites.length;
   const lastEl = document.getElementById("evolStatLast");
   lastEl.textContent = Math.round(last.taux*100)+"%";
-  lastEl.style.color = last.taux>=0.8 ? "#1c6b2e" : (last.taux>=0.51 ? "#8a5a00" : "#a11313");
+  lastEl.style.color = tierBarColor(last.taux);
   document.getElementById("evolStatAvg").textContent = Math.round(avg*100)+"%";
 
   const trendEl = document.getElementById("evolStatTrend");
@@ -4401,8 +4439,9 @@ function drawEvolutionSvg(visites){
     svgParts.push(`<text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#8b8577">${Math.round(t*100)}%</text>`);
   });
 
-  // zones de seuil (repères visuels légers)
-  svgParts.push(`<line x1="${padL}" y1="${yFor(0.8)}" x2="${W-padR}" y2="${yFor(0.8)}" stroke="#1c6b2e" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
+  // zones de seuil (repères visuels légers) — alignés sur le barème d'appréciation
+  svgParts.push(`<line x1="${padL}" y1="${yFor(0.85)}" x2="${W-padR}" y2="${yFor(0.85)}" stroke="#1c6b2e" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
+  svgParts.push(`<line x1="${padL}" y1="${yFor(0.70)}" x2="${W-padR}" y2="${yFor(0.70)}" stroke="#1f5c96" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
   svgParts.push(`<line x1="${padL}" y1="${yFor(0.51)}" x2="${W-padR}" y2="${yFor(0.51)}" stroke="#a11313" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>`);
 
   // ligne de la courbe
@@ -4412,7 +4451,7 @@ function drawEvolutionSvg(visites){
   // points + labels de date
   visites.forEach((r,i)=>{
     const x = xFor(i), y = yFor(r.taux);
-    const color = r.taux>=0.8 ? "#1c6b2e" : (r.taux>=0.51 ? "#c98a00" : "#a11313");
+    const color = tierBarColor(r.taux);
     svgParts.push(`<circle cx="${x}" cy="${y}" r="4.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`);
     svgParts.push(`<text x="${x}" y="${y-12}" text-anchor="middle" font-size="11" font-weight="700" fill="#2a2620">${Math.round(r.taux*100)}%</text>`);
     // limiter le nombre de labels de date affichés si trop de visites
