@@ -440,6 +440,8 @@
     </div>
     <div class="topbar-ctx" id="ctxDashboard" style="display:none;">
       <div class="taux-pill" id="pillTotalEmployes" style="display:none;">Personnel total <b id="tbTotalEmployes">–</b></div>
+      <div class="taux-pill" id="pillTotalLivreurs" style="display:none;">Total livreurs <b id="tbTotalLivreurs">–</b></div>
+      <div class="taux-pill" id="pillTotalSecurite" style="display:none;">Total agents de sécurité <b id="tbTotalSecurite">–</b></div>
     </div>
   </div>
   <div class="announce-banner" id="announceBanner" style="display:none;">
@@ -2283,6 +2285,10 @@ async function buildDashboard(){
   let rank = 0;
   let totalEmployes = 0;
   let agencesAvecEffectif = 0;
+  let totalLivreurs = 0;
+  let agencesAvecLivreurs = 0;
+  let totalSecurite = 0;
+  let agencesAvecSecurite = 0;
   rows.forEach(r=>{
     rank++;
     const tr = document.createElement("tr");
@@ -2291,6 +2297,10 @@ async function buildDashboard(){
       const nbEmployes = parseInt(r.rec.nb_employes, 10);
       const nbEmployesValid = !isNaN(nbEmployes);
       if(nbEmployesValid){ totalEmployes += nbEmployes; agencesAvecEffectif++; }
+      const nbLivreurs = parseInt(r.rec.nb_livreurs, 10);
+      if(!isNaN(nbLivreurs)){ totalLivreurs += nbLivreurs; agencesAvecLivreurs++; }
+      const nbSecurite = parseInt(r.rec.nb_agents_securite, 10);
+      if(!isNaN(nbSecurite)){ totalSecurite += nbSecurite; agencesAvecSecurite++; }
       tr.dataset.status = r.rec.approved ? "approved" : (r.rec.closed ? "closed" : "pending");
       tr.className = "clickable";
       tr.addEventListener("click", ()=> openHistory(r.name, tr));
@@ -2328,11 +2338,19 @@ async function buildDashboard(){
   buildTopFlop();
 
   const pillTotal = document.getElementById("pillTotalEmployes");
+  const pillLivreurs = document.getElementById("pillTotalLivreurs");
+  const pillSecurite = document.getElementById("pillTotalSecurite");
   if(showEmployesCol){
     pillTotal.style.display = "flex";
     document.getElementById("tbTotalEmployes").textContent = totalEmployes + " (" + agencesAvecEffectif + "/" + rows.length + " agences)";
+    pillLivreurs.style.display = "flex";
+    document.getElementById("tbTotalLivreurs").textContent = totalLivreurs + " (" + agencesAvecLivreurs + "/" + rows.length + " agences)";
+    pillSecurite.style.display = "flex";
+    document.getElementById("tbTotalSecurite").textContent = totalSecurite + " (" + agencesAvecSecurite + "/" + rows.length + " agences)";
   } else {
     pillTotal.style.display = "none";
+    pillLivreurs.style.display = "none";
+    pillSecurite.style.display = "none";
   }
 
   statusEl.textContent = all.length+" visite"+(all.length>1?"s":"")+" enregistrée"+(all.length>1?"s":"")+" au total"
@@ -2412,11 +2430,19 @@ async function buildRegionAnomalies(){
   let totalPoints = 0;
   let totalEmployesRegion = 0;
   let agencesAvecEffectifRegion = 0;
+  let totalLivreursRegion = 0;
+  let agencesAvecLivreursRegion = 0;
+  let totalSecuriteRegion = 0;
+  let agencesAvecSecuriteRegion = 0;
   scopedAgences.forEach(name=>{
     const rec = byAgence[name.trim().toLowerCase()];
     if(!rec) return;
     const nbEmployes = parseInt(rec.nb_employes, 10);
     if(!isNaN(nbEmployes)){ totalEmployesRegion += nbEmployes; agencesAvecEffectifRegion++; }
+    const nbLivreurs = parseInt(rec.nb_livreurs, 10);
+    if(!isNaN(nbLivreurs)){ totalLivreursRegion += nbLivreurs; agencesAvecLivreursRegion++; }
+    const nbSecurite = parseInt(rec.nb_agents_securite, 10);
+    if(!isNaN(nbSecurite)){ totalSecuriteRegion += nbSecurite; agencesAvecSecuriteRegion++; }
     const points = drVisiblePoints(rec);
     if(points.length === 0) return;
     totalPoints += points.length;
@@ -2473,6 +2499,12 @@ async function buildRegionAnomalies(){
   const pillTotal = document.getElementById("pillTotalEmployes");
   pillTotal.style.display = "flex";
   document.getElementById("tbTotalEmployes").textContent = totalEmployesRegion + " (" + agencesAvecEffectifRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
+  const pillLivreurs = document.getElementById("pillTotalLivreurs");
+  pillLivreurs.style.display = "flex";
+  document.getElementById("tbTotalLivreurs").textContent = totalLivreursRegion + " (" + agencesAvecLivreursRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
+  const pillSecurite = document.getElementById("pillTotalSecurite");
+  pillSecurite.style.display = "flex";
+  document.getElementById("tbTotalSecurite").textContent = totalSecuriteRegion + " (" + agencesAvecSecuriteRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
 }
 
 function openAgencyAnomalies(group, anchorRow){
