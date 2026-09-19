@@ -515,6 +515,7 @@
       <span id="dashFilterCount" style="font-size:11.5px;color:var(--muted);"></span>
       <button class="btn" id="btnToggleTopFlop" style="background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">🏆 Top 10 / Flop 10</button>
       <button class="btn" id="btnToggleCorrection" style="display:none;background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">🔓 Correction DR : Activée</button>
+      <button class="btn" id="btnToggleAnomaliesView" style="display:none;background:#fff;color:var(--navy);border:1px solid var(--navy);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;">⚠ Voir les anomalies (échéances)</button>
     </div>
     <div id="topFlopPanel" style="display:none;margin-bottom:16px;">
       <div style="display:flex;gap:14px;flex-wrap:wrap;">
@@ -535,6 +536,10 @@
     <table class="dash" id="dashAnomaliesTable" style="display:none;">
       <thead><tr><th>Agence</th><th>Dernière visite</th><th>Points non conformes</th><th>Correction</th></tr></thead>
       <tbody id="dashAnomaliesBody"></tbody>
+    </table>
+    <table class="dash" id="dashPointsTable" style="display:none;">
+      <thead><tr><th>Point non conforme</th><th>Section</th><th>Agences concernées</th><th style="width:160px;">Échéance</th></tr></thead>
+      <tbody id="dashPointsBody"></tbody>
     </table>
   </div>
 </div>
@@ -675,6 +680,7 @@
         <button class="subtab" id="adminSubReport" style="font-size:12.5px;padding:8px 14px;">Rapport mensuel</button>
         <button class="subtab" id="adminSubAnnonce" style="font-size:12.5px;padding:8px 14px;">Annonce</button>
         <button class="subtab" id="adminSubVolumetrie" style="font-size:12.5px;padding:8px 14px;">Volumétrie colis</button>
+        <button class="subtab" id="adminSubCroisement" style="font-size:12.5px;padding:8px 14px;">Croisement</button>
       </div>
     </div>
 
@@ -918,6 +924,24 @@
           <tbody id="volumetrieCompBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ---- Croisement Conformité × Volumétrie ---- -->
+    <div id="adminPaneCroisement" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
+        Conformité de la dernière visite de chaque agence vs volume moyen de colis expédiés sur les
+        3 derniers mois calendaires. Le <b>ratio</b> = volume expédié × écart à l'objectif de 80%
+        (plafonné à 0 si l'agence atteint/dépasse l'objectif) : plus il est élevé, plus l'agence cumule
+        un fort volume de clients concernés et une conformité éloignée de l'objectif — un vrai signal
+        pour prioriser les interventions. Toutes les agences sont affichées, triées par ratio décroissant.
+      </p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <span id="croisementStatus" style="font-size:12.5px;"></span>
+      </div>
+      <table class="dash" id="croisementTable" style="max-width:640px;">
+        <thead><tr><th>Agence</th><th>Conformité</th><th>Volume expédié (moy. 3 mois)</th><th>Ratio</th></tr></thead>
+        <tbody id="croisementBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -2217,6 +2241,10 @@ document.getElementById("btnToggleTopFlop").addEventListener("click", ()=>{
 });
 
 document.getElementById("btnToggleCorrection").addEventListener("click", toggleCorrectionEnabled);
+document.getElementById("btnToggleAnomaliesView").addEventListener("click", ()=>{
+  managerAnomaliesView = !managerAnomaliesView;
+  buildDashboard();
+});
 
 function correctionCellHTML(rec){
   if(rec.correction_status === "done"){
@@ -2232,24 +2260,46 @@ function correctionCellHTML(rec){
   return `<span class="taux-tag" style="background:#eee;color:#888;">Non démarrée</span>`;
 }
 
+let managerAnomaliesView = false;
+
 async function buildDashboard(){
   await fetchCorrectionEnabled();
   // Le Directeur régional a une vue dédiée : uniquement les points non conformes de sa région
   if(currentRole === "directeur_regional"){
     document.getElementById("dashRankingTable").style.display = "none";
     document.getElementById("dashAnomaliesTable").style.display = "";
+    document.getElementById("dashPointsTable").style.display = "none";
     document.getElementById("dashTitle").textContent = "Points non conformes (Administration / RH / Commercial et Marketing) — Région " + (currentUserRegion || "?");
     document.getElementById("btnToggleTopFlop").style.display = "none";
     document.getElementById("topFlopPanel").style.display = "none";
     document.getElementById("btnToggleCorrection").style.display = "none";
+    document.getElementById("btnToggleAnomaliesView").style.display = "none";
     await buildRegionAnomalies();
     return;
   }
+  // Le Manager bascule vers une vue groupée PAR TYPE DE POINT (toutes agences confondues),
+  // pour fixer une échéance unique par non-conformité au lieu d'agence par agence.
+  if(currentRole === "manager" && managerAnomaliesView){
+    document.getElementById("dashRankingTable").style.display = "none";
+    document.getElementById("dashAnomaliesTable").style.display = "none";
+    document.getElementById("dashPointsTable").style.display = "";
+    document.getElementById("dashTitle").textContent = "Points non conformes par type — Toutes agences";
+    document.getElementById("btnToggleTopFlop").style.display = "none";
+    document.getElementById("topFlopPanel").style.display = "none";
+    document.getElementById("btnToggleCorrection").style.display = "none";
+    document.getElementById("btnToggleAnomaliesView").style.display = "";
+    document.getElementById("btnToggleAnomaliesView").textContent = "📊 Voir le comparatif";
+    await buildManagerPointsView();
+    return;
+  }
+  document.getElementById("dashPointsTable").style.display = "none";
   document.getElementById("dashRankingTable").style.display = "";
   document.getElementById("dashAnomaliesTable").style.display = "none";
   document.getElementById("dashTitle").textContent = "Comparatif de conformité — Toutes agences";
   document.getElementById("btnToggleTopFlop").style.display = "";
   document.getElementById("btnToggleCorrection").style.display = (currentRole === "admin") ? "" : "none";
+  document.getElementById("btnToggleAnomaliesView").style.display = (currentRole === "manager") ? "" : "none";
+  document.getElementById("btnToggleAnomaliesView").textContent = "⚠ Voir les anomalies (échéances)";
 
   const statusEl = document.getElementById("dashStatus");
   statusEl.textContent = "Chargement…";
@@ -2396,9 +2446,60 @@ function drVisiblePoints(rec){
     if(statuts[id] !== "nonconforme") return;
     const info = ITEM_INFO[id];
     if(!info || !DR_VISIBLE_SECTIONS.includes(info.sectionKey)) return;
-    points.push({ section: info.section, label: info.label, anomalie: anomalies[id] || "" });
+    points.push({ id, section: info.section, label: info.label, anomalie: anomalies[id] || "" });
   });
   return points;
+}
+// Comme drVisiblePoints, mais sans restriction de section — utilisé par le Manager
+// (vue nationale) qui doit voir toutes les non-conformités pour fixer les échéances.
+function allNonConformPoints(rec){
+  const statuts = rec.statuts || {};
+  const anomalies = rec.anomalies || {};
+  const points = [];
+  Object.keys(statuts).forEach(id=>{
+    if(statuts[id] !== "nonconforme") return;
+    const info = ITEM_INFO[id];
+    if(!info) return;
+    points.push({ id, section: info.section, label: info.label, anomalie: anomalies[id] || "" });
+  });
+  return points;
+}
+
+let lastCorrectionTaches = {}; // visite_id -> { item_id -> tache }
+
+// Fait hériter automatiquement l'échéance "de référence" d'un type de point (fixée une fois par
+// le Manager dans correction_point_echeances) à toute occurrence qui n'a pas encore d'échéance —
+// y compris une agence nouvellement repérée non conforme sur ce même point après coup.
+// Ne touche jamais un point déjà marqué "fait".
+async function syncInheritedEcheances(occurrences, tachesByVisite){
+  const itemIds = [...new Set(occurrences.map(o=> o.item_id))];
+  if(!itemIds.length) return tachesByVisite;
+  try{
+    const { data: pointEcheances, error } = await sb.from("correction_point_echeances").select("*").in("item_id", itemIds);
+    if(error || !pointEcheances || !pointEcheances.length) return tachesByVisite;
+    const echeanceByItem = {};
+    pointEcheances.forEach(e=> echeanceByItem[e.item_id] = e.echeance);
+
+    const toSync = [];
+    occurrences.forEach(o=>{
+      const existing = tachesByVisite[o.visite_id] && tachesByVisite[o.visite_id][o.item_id];
+      const pointEch = echeanceByItem[o.item_id];
+      if(!pointEch) return;
+      if(existing && existing.statut === "fait") return; // ne jamais rouvrir un point déjà fait
+      if(existing && existing.echeance === pointEch) return; // déjà synchronisé
+      toSync.push({ visite_id:o.visite_id, item_id:o.item_id, echeance:pointEch, statut: existing ? existing.statut : "a_faire" });
+    });
+    if(!toSync.length) return tachesByVisite;
+
+    const { error: upsertErr } = await sb.from("correction_taches").upsert(toSync, { onConflict:"visite_id,item_id" });
+    if(upsertErr){ console.warn("Synchronisation des échéances héritées : échec.", upsertErr); return tachesByVisite; }
+
+    toSync.forEach(t=>{
+      if(!tachesByVisite[t.visite_id]) tachesByVisite[t.visite_id] = {};
+      tachesByVisite[t.visite_id][t.item_id] = { ...tachesByVisite[t.visite_id][t.item_id], ...t };
+    });
+  }catch(e){ console.warn("Synchronisation des échéances héritées : erreur.", e); }
+  return tachesByVisite;
 }
 
 async function buildRegionAnomalies(){
@@ -2415,12 +2516,13 @@ async function buildRegionAnomalies(){
     return;
   }
 
-  const scopedAgences = agencesForRegionAll(currentUserRegion);
+  const isManagerView = (currentRole === "manager");
+  const scopedAgences = isManagerView ? allAgenceNames() : agencesForRegionAll(currentUserRegion);
 
-  // seules les visites approuvées par le Manager sont visibles au DR
+  // seules les visites approuvées par le Manager sont visibles (DR et Manager)
   const approvedOnly = all.filter(rec=> rec.approved === true);
 
-  // dernière visite APPROUVÉE par agence (parmi les agences de la région)
+  // dernière visite APPROUVÉE par agence (parmi les agences du périmètre)
   const byAgenceSorted = groupVisitesByAgence(approvedOnly);
   const byAgence = {};
   Object.keys(byAgenceSorted).forEach(key=>{ byAgence[key] = byAgenceSorted[key][0]; });
@@ -2443,7 +2545,7 @@ async function buildRegionAnomalies(){
     if(!isNaN(nbLivreurs)){ totalLivreursRegion += nbLivreurs; agencesAvecLivreursRegion++; }
     const nbSecurite = parseInt(rec.nb_agents_securite, 10);
     if(!isNaN(nbSecurite)){ totalSecuriteRegion += nbSecurite; agencesAvecSecuriteRegion++; }
-    const points = drVisiblePoints(rec);
+    const points = isManagerView ? allNonConformPoints(rec) : drVisiblePoints(rec);
     if(points.length === 0) return;
     totalPoints += points.length;
 
@@ -2466,9 +2568,28 @@ async function buildRegionAnomalies(){
   agencyGroups.sort((a,b)=> b.points.length - a.points.length);
   lastAnomalyGroups = agencyGroups;
 
+  // Charge les tâches de correction (échéance/statut par point) pour les visites du périmètre
+  lastCorrectionTaches = {};
+  if(agencyGroups.length){
+    try{
+      const visiteIds = agencyGroups.map(g=> g.id);
+      const { data: taches, error } = await sb.from("correction_taches").select("*").in("visite_id", visiteIds);
+      if(error) throw error;
+      (taches||[]).forEach(t=>{
+        if(!lastCorrectionTaches[t.visite_id]) lastCorrectionTaches[t.visite_id] = {};
+        lastCorrectionTaches[t.visite_id][t.item_id] = t;
+      });
+      // Hérite automatiquement l'échéance de référence fixée par le Manager pour les
+      // occurrences qui n'en ont pas encore (nouvelle agence concernée par un point déjà traité ailleurs)
+      const occurrences = [];
+      agencyGroups.forEach(g=> g.points.forEach(p=> occurrences.push({ visite_id:g.id, item_id:p.id })));
+      lastCorrectionTaches = await syncInheritedEcheances(occurrences, lastCorrectionTaches);
+    }catch(e){ console.warn("Tâches de correction : chargement impossible.", e); }
+  }
+
   tbody.innerHTML = "";
   if(agencyGroups.length === 0){
-    tbody.innerHTML = `<tr><td colspan="4" class="agence-empty">Aucun point non conforme relevé pour les agences de cette région (parmi les visites approuvées par le Manager).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="agence-empty">Aucun point non conforme relevé pour les agences ${isManagerView ? "" : "de cette région "}(parmi les visites approuvées par le Manager).</td></tr>`;
   } else {
     agencyGroups.forEach(g=>{
       const tr = document.createElement("tr");
@@ -2482,9 +2603,9 @@ async function buildRegionAnomalies(){
       `;
       tr.addEventListener("click", (ev)=>{
         if(ev.target.closest(".correction-cell")) return; // ne pas ouvrir/fermer le détail au clic sur les boutons
-        openAgencyAnomalies(g, tr);
+        openAgencyAnomalies(g, tr, isManagerView);
       });
-      renderCorrectionCell(tr.querySelector(".correction-cell"), g);
+      renderTacheSummaryCell(tr.querySelector(".correction-cell"), g);
       tbody.appendChild(tr);
     });
   }
@@ -2494,20 +2615,262 @@ async function buildRegionAnomalies(){
 
   statusEl.textContent = agencyGroups.length+" agence"+(agencyGroups.length>1?"s":"")+" concernée"+(agencyGroups.length>1?"s":"")
     +" · "+totalPoints+" point"+(totalPoints>1?"s":"")+" non conforme"+(totalPoints>1?"s":"")
-    +" (région "+currentUserRegion+", visites approuvées, temps réel)";
+    +(isManagerView ? " (toutes agences, visites approuvées, temps réel)" : " (région "+currentUserRegion+", visites approuvées, temps réel)");
 
+  const scopeLabel = isManagerView ? "toutes agences" : ("agences région " + currentUserRegion);
   const pillTotal = document.getElementById("pillTotalEmployes");
   pillTotal.style.display = "flex";
-  document.getElementById("tbTotalEmployes").textContent = totalEmployesRegion + " (" + agencesAvecEffectifRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
+  document.getElementById("tbTotalEmployes").textContent = totalEmployesRegion + " (" + agencesAvecEffectifRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
   const pillLivreurs = document.getElementById("pillTotalLivreurs");
   pillLivreurs.style.display = "flex";
-  document.getElementById("tbTotalLivreurs").textContent = totalLivreursRegion + " (" + agencesAvecLivreursRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
+  document.getElementById("tbTotalLivreurs").textContent = totalLivreursRegion + " (" + agencesAvecLivreursRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
   const pillSecurite = document.getElementById("pillTotalSecurite");
   pillSecurite.style.display = "flex";
-  document.getElementById("tbTotalSecurite").textContent = totalSecuriteRegion + " (" + agencesAvecSecuriteRegion + "/" + scopedAgences.length + " agences région " + currentUserRegion + ")";
+  document.getElementById("tbTotalSecurite").textContent = totalSecuriteRegion + " (" + agencesAvecSecuriteRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
 }
 
-function openAgencyAnomalies(group, anchorRow){
+// Résumé de l'état de correction d'une visite, calculé à partir des tâches par point
+// (échéance fixée par le Manager, statut coché par le DR) plutôt que d'un statut global.
+function tacheSummary(g){
+  const taches = lastCorrectionTaches[g.id] || {};
+  const todayISO = new Date().toISOString().slice(0,10);
+  let nbFait = 0, nbEcheanceFixee = 0, nbEnRetard = 0;
+  g.points.forEach(p=>{
+    const t = taches[p.id];
+    if(t && t.statut === "fait") nbFait++;
+    if(t && t.echeance) nbEcheanceFixee++;
+    if(t && t.statut === "a_faire" && t.echeance && t.echeance < todayISO) nbEnRetard++;
+  });
+  let state = "not_started";
+  if(nbFait === g.points.length && g.points.length>0) state = "done";
+  else if(nbEcheanceFixee > 0) state = "in_progress";
+  return { nbFait, total:g.points.length, nbEcheanceFixee, nbEnRetard, state };
+}
+
+function renderTacheSummaryCell(cell, g){
+  const s = tacheSummary(g);
+  let html = "";
+  if(s.state === "done"){
+    html = `<span class="taux-tag" style="background:var(--ok-bg);color:var(--ok-fg);">✓ Tous les points corrigés</span>`;
+  } else if(s.state === "in_progress"){
+    html = `<span class="taux-tag" style="background:#fdf1d6;color:#8a5a00;">${s.nbFait}/${s.total} corrigés</span>`;
+    if(s.nbEnRetard>0) html += ` <span class="taux-tag" style="background:var(--bad-bg);color:var(--bad-fg);margin-left:4px;">⚠ ${s.nbEnRetard} en retard</span>`;
+  } else {
+    html = `<span class="taux-tag" style="background:#eee;color:#888;">${currentRole==="manager" ? "Échéance à fixer" : "En attente d'échéance (Manager)"}</span>`;
+  }
+  // Trace de l'ancien système de correction (visites déjà en correction avant la refonte)
+  if(g.correctionStatus === "in_progress" || g.correctionStatus === "done"){
+    const oldNote = g.correctionStatus === "done" ? g.correctionDoneNote : g.correctionStartedNote;
+    html += `<div style="font-size:10px;color:var(--muted);margin-top:4px;font-style:italic;">Ancien suivi (${g.correctionStatus==="done"?"terminé":"en cours"})${oldNote ? " : \""+escapeHtml(oldNote)+"\"" : ""}</div>`;
+  }
+  const warningHTML = g.previousUnfinished
+    ? `<button class="btn btn-view-previous" style="display:block;margin-top:5px;background:#fde2e2;color:#a11313;border:none;padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:700;cursor:pointer;">⚠ Correction précédente (${g.previousUnfinished.date}) non finalisée — voir</button>`
+    : "";
+  cell.innerHTML = html + warningHTML;
+  const viewPrevBtn = cell.querySelector(".btn-view-previous");
+  if(viewPrevBtn) viewPrevBtn.addEventListener("click", (ev)=>{
+    ev.stopPropagation();
+    openPreviousVisiteAnomalies(g, cell.closest("tr"));
+  });
+}
+
+async function saveTacheEcheance(visiteId, itemId, echeance){
+  const { error } = await sb.from("correction_taches").upsert({
+    visite_id: visiteId, item_id: itemId, echeance: echeance || null,
+    echeance_set_at: new Date().toISOString(), echeance_set_by: currentUser.id
+  }, { onConflict:"visite_id,item_id" });
+  return error;
+}
+async function saveTacheStatut(visiteId, itemId, statut){
+  const patch = { visite_id:visiteId, item_id:itemId, statut };
+  if(statut === "fait"){ patch.done_at = new Date().toISOString(); patch.done_by = currentUser.id; }
+  else { patch.done_at = null; patch.done_by = null; }
+  const { error } = await sb.from("correction_taches").upsert(patch, { onConflict:"visite_id,item_id" });
+  return error;
+}
+
+function openAgencyAnomalies(group, anchorRow, isManagerView){
+  const existingExpand = document.querySelector("tr.anomalies-expand");
+  const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow;
+  if(existingExpand) existingExpand.remove();
+  if(wasOpenForThisRow) return;
+
+  const nCols = anchorRow.children.length;
+  const expandRow = document.createElement("tr");
+  expandRow.className = "anomalies-expand";
+  const td = document.createElement("td");
+  td.colSpan = nCols;
+  const todayISO = new Date().toISOString().slice(0,10);
+  const taches = lastCorrectionTaches[group.id] || {};
+
+  group.points.forEach(p=>{
+    const t = taches[p.id] || { echeance:null, statut:"a_faire" };
+    const enRetard = t.statut === "a_faire" && t.echeance && t.echeance < todayISO;
+    const row = document.createElement("div");
+    row.className = "hist-row";
+    row.style.flexDirection = "column";
+    row.style.alignItems = "stretch";
+    row.style.gap = "2px";
+    row.style.cssText += enRetard ? "background:#fdecec;border-radius:6px;padding:6px;" : "";
+    row.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
+      <div style="font-size:12.5px;">${p.label}</div>
+      <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+      <div class="tache-controls" style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+        ${isManagerView ? `
+          <label style="font-size:11px;color:var(--muted);">Échéance
+            <input type="date" class="tache-echeance-input" value="${t.echeance||""}" style="margin-left:4px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;font-size:11.5px;">
+          </label>
+        ` : `
+          <span style="font-size:11px;color:${enRetard?"#a11313":"var(--muted)"};">Échéance : <b>${t.echeance || "non fixée par le Manager"}</b>${enRetard?" ⚠ dépassée":""}</span>
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px;${t.echeance?"":"opacity:.5;"}">
+            <input type="checkbox" class="tache-statut-input" ${t.statut==="fait"?"checked":""} ${t.echeance?"":"disabled"}> Fait
+          </label>
+        `}
+      </div>
+    `;
+    const echeanceInput = row.querySelector(".tache-echeance-input");
+    if(echeanceInput) echeanceInput.addEventListener("change", async (ev)=>{
+      ev.stopPropagation();
+      const err = await saveTacheEcheance(group.id, p.id, echeanceInput.value);
+      if(err) showToast("Échec de l'enregistrement de l'échéance.", 3500);
+      else showToast("Échéance enregistrée.", 2000);
+    });
+    const statutInput = row.querySelector(".tache-statut-input");
+    if(statutInput) statutInput.addEventListener("change", async (ev)=>{
+      ev.stopPropagation();
+      const err = await saveTacheStatut(group.id, p.id, statutInput.checked ? "fait" : "a_faire");
+      if(err) showToast("Échec de l'enregistrement du statut.", 3500);
+    });
+    row.addEventListener("click", (ev)=> ev.stopPropagation());
+    td.appendChild(row);
+  });
+
+  if(group.commentaireGeneral){
+    const commentBox = document.createElement("div");
+    commentBox.style.cssText = "margin-top:6px;padding:8px 10px;background:#f6f4ee;border-radius:6px;font-size:12px;color:var(--text);white-space:pre-wrap;";
+    commentBox.innerHTML = `<b style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px;">Commentaire général</b>${escapeHtml(group.commentaireGeneral)}`;
+    td.appendChild(commentBox);
+  }
+
+  expandRow.appendChild(td);
+  anchorRow.after(expandRow);
+  expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+// ======================================================================
+// VUE MANAGER : POINTS NON CONFORMES GROUPÉS PAR TYPE (toutes agences)
+// Le Manager fixe UNE échéance par type de point, qui s'applique à toutes les
+// agences actuellement concernées et se propage automatiquement à toute
+// nouvelle agence relevée non conforme sur ce même point par la suite.
+// ======================================================================
+let lastPointGroups = [];
+
+async function buildManagerPointsView(){
+  const statusEl = document.getElementById("dashStatus");
+  const tbody = document.getElementById("dashPointsBody");
+  statusEl.textContent = "Chargement…";
+  let all = [];
+  try{
+    all = await getAllVisites();
+  }catch(e){
+    console.warn("Chargement impossible :", e);
+    statusEl.textContent = "Impossible de charger les données — vérifie ta connexion internet.";
+    tbody.innerHTML = "";
+    return;
+  }
+
+  const approvedOnly = all.filter(rec=> rec.approved === true);
+  const byAgenceSorted = groupVisitesByAgence(approvedOnly);
+  const byAgence = {};
+  Object.keys(byAgenceSorted).forEach(key=>{ byAgence[key] = byAgenceSorted[key][0]; });
+
+  // Regroupe les non-conformités actuelles par type de point (item_id), toutes agences confondues
+  const pointGroups = {}; // item_id -> { section, label, occurrences:[{agence, region, visite_id}] }
+  allAgenceNames().forEach(name=>{
+    const rec = byAgence[name.trim().toLowerCase()];
+    if(!rec) return;
+    allNonConformPoints(rec).forEach(p=>{
+      if(!pointGroups[p.id]) pointGroups[p.id] = { section:p.section, label:p.label, occurrences:[] };
+      pointGroups[p.id].occurrences.push({ agence:name, region: regionOfAgence(name), visite_id: rec.id });
+    });
+  });
+  const groups = Object.keys(pointGroups).map(itemId=> ({ itemId, ...pointGroups[itemId] }));
+  groups.sort((a,b)=> b.occurrences.length - a.occurrences.length);
+  lastPointGroups = groups;
+
+  // Charge les tâches existantes (statuts) + synchronise l'héritage d'échéance
+  lastCorrectionTaches = {};
+  if(groups.length){
+    try{
+      const visiteIds = [...new Set(groups.flatMap(g=> g.occurrences.map(o=> o.visite_id)))];
+      const { data: taches, error } = await sb.from("correction_taches").select("*").in("visite_id", visiteIds);
+      if(error) throw error;
+      (taches||[]).forEach(t=>{
+        if(!lastCorrectionTaches[t.visite_id]) lastCorrectionTaches[t.visite_id] = {};
+        lastCorrectionTaches[t.visite_id][t.item_id] = t;
+      });
+      const occurrences = groups.flatMap(g=> g.occurrences.map(o=> ({ visite_id:o.visite_id, item_id:g.itemId })));
+      lastCorrectionTaches = await syncInheritedEcheances(occurrences, lastCorrectionTaches);
+    }catch(e){ console.warn("Tâches de correction : chargement impossible.", e); }
+  }
+
+  // Échéances de référence déjà fixées par type de point
+  let pointEcheances = {};
+  try{
+    const { data, error } = await sb.from("correction_point_echeances").select("*");
+    if(error) throw error;
+    (data||[]).forEach(e=> pointEcheances[e.item_id] = e.echeance);
+  }catch(e){ console.warn("Échéances de référence : chargement impossible.", e); }
+
+  tbody.innerHTML = "";
+  if(groups.length === 0){
+    tbody.innerHTML = `<tr><td colspan="4" class="agence-empty">Aucun point non conforme relevé actuellement (parmi les visites approuvées par le Manager).</td></tr>`;
+  } else {
+    groups.forEach(g=>{
+      const tr = document.createElement("tr");
+      tr.className = "clickable";
+      const nbFait = g.occurrences.filter(o=> (lastCorrectionTaches[o.visite_id] && lastCorrectionTaches[o.visite_id][g.itemId] && lastCorrectionTaches[o.visite_id][g.itemId].statut==="fait")).length;
+      tr.innerHTML = `
+        <td>${g.label}</td>
+        <td style="color:var(--muted);font-size:11.5px;text-transform:uppercase;">${g.section}</td>
+        <td><span class="taux-tag" style="${tierTagStyle(0)}">${g.occurrences.length} agence${g.occurrences.length>1?"s":""}${nbFait?" · "+nbFait+" corrigée"+(nbFait>1?"s":""):""}</span></td>
+        <td class="point-echeance-cell"></td>
+      `;
+      const cell = tr.querySelector(".point-echeance-cell");
+      cell.innerHTML = `<input type="date" class="point-echeance-input" value="${pointEcheances[g.itemId]||""}" style="padding:5px 7px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;">`;
+      const input = cell.querySelector(".point-echeance-input");
+      input.addEventListener("click", ev=> ev.stopPropagation());
+      input.addEventListener("change", async (ev)=>{
+        ev.stopPropagation();
+        if(!input.value) return;
+        const { error: e1 } = await sb.from("correction_point_echeances").upsert({
+          item_id: g.itemId, echeance: input.value, set_at: new Date().toISOString(), set_by: currentUser.id
+        });
+        if(e1){ showToast("Échec de l'enregistrement de l'échéance.", 3500); return; }
+        // Applique la nouvelle échéance à toutes les occurrences actuelles pas encore corrigées
+        const toApply = g.occurrences
+          .filter(o=> !(lastCorrectionTaches[o.visite_id] && lastCorrectionTaches[o.visite_id][g.itemId] && lastCorrectionTaches[o.visite_id][g.itemId].statut==="fait"))
+          .map(o=> ({ visite_id:o.visite_id, item_id:g.itemId, echeance:input.value, statut:"a_faire" }));
+        if(toApply.length){
+          const { error: e2 } = await sb.from("correction_taches").upsert(toApply, { onConflict:"visite_id,item_id" });
+          if(e2){ showToast("Échéance de référence enregistrée, mais échec de son application à certaines agences.", 4000); return; }
+        }
+        showToast(`Échéance appliquée à ${toApply.length} agence${toApply.length>1?"s":""}.`, 2500);
+      });
+      tr.addEventListener("click", (ev)=>{
+        if(ev.target.closest(".point-echeance-cell")) return;
+        openPointOccurrences(g, tr);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+  document.getElementById("dashStatusFilter").style.display = "none";
+  statusEl.textContent = groups.length+" type"+(groups.length>1?"s":"")+" de point non conforme"+(groups.length>1?"s":"")
+    +" (toutes agences, visites approuvées, temps réel)";
+}
+
+function openPointOccurrences(g, anchorRow){
   const existingExpand = document.querySelector("tr.anomalies-expand");
   const wasOpenForThisRow = existingExpand && existingExpand.previousElementSibling === anchorRow;
   if(existingExpand) existingExpand.remove();
@@ -2519,26 +2882,17 @@ function openAgencyAnomalies(group, anchorRow){
   const td = document.createElement("td");
   td.colSpan = nCols;
 
-  group.points.forEach(p=>{
+  [...g.occurrences].sort((a,b)=> a.agence.localeCompare(b.agence)).forEach(o=>{
+    const t = lastCorrectionTaches[o.visite_id] && lastCorrectionTaches[o.visite_id][g.itemId];
+    const fait = t && t.statut === "fait";
     const row = document.createElement("div");
     row.className = "hist-row";
-    row.style.flexDirection = "column";
-    row.style.alignItems = "stretch";
-    row.style.gap = "2px";
     row.innerHTML = `
-      <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
-      <div style="font-size:12.5px;">${p.label}</div>
-      <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+      <div style="flex:1;font-size:12.5px;">${o.agence} <span style="color:var(--muted);font-size:11px;">(région ${o.region||"?"})</span></div>
+      <span class="taux-tag" style="${fait ? 'background:var(--ok-bg);color:var(--ok-fg);' : 'background:#eee;color:#888;'}">${fait?"✓ Corrigé":"À faire"}</span>
     `;
     td.appendChild(row);
   });
-
-  if(group.commentaireGeneral){
-    const commentBox = document.createElement("div");
-    commentBox.style.cssText = "margin-top:6px;padding:8px 10px;background:#f6f4ee;border-radius:6px;font-size:12px;color:var(--text);white-space:pre-wrap;";
-    commentBox.innerHTML = `<b style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px;">Commentaire général</b>${escapeHtml(group.commentaireGeneral)}`;
-    td.appendChild(commentBox);
-  }
 
   expandRow.appendChild(td);
   anchorRow.after(expandRow);
@@ -2902,6 +3256,7 @@ function adminSwitchSub(name){
   document.getElementById("adminPaneReport").style.display = (name==="report") ? "" : "none";
   document.getElementById("adminPaneAnnonce").style.display = (name==="annonce") ? "" : "none";
   document.getElementById("adminPaneVolumetrie").style.display = (name==="volumetrie") ? "" : "none";
+  document.getElementById("adminPaneCroisement").style.display = (name==="croisement") ? "" : "none";
   document.getElementById("adminSubUsers").classList.toggle("active", name==="users");
   document.getElementById("adminSubLog").classList.toggle("active", name==="log");
   document.getElementById("adminSubWeights").classList.toggle("active", name==="weights");
@@ -2910,6 +3265,7 @@ function adminSwitchSub(name){
   document.getElementById("adminSubReport").classList.toggle("active", name==="report");
   document.getElementById("adminSubAnnonce").classList.toggle("active", name==="annonce");
   document.getElementById("adminSubVolumetrie").classList.toggle("active", name==="volumetrie");
+  document.getElementById("adminSubCroisement").classList.toggle("active", name==="croisement");
   if(name==="users") buildAdminUsers();
   if(name==="log") buildAdminLog();
   if(name==="weights") buildAdminWeights();
@@ -2918,6 +3274,7 @@ function adminSwitchSub(name){
   if(name==="report") initReportPane();
   if(name==="annonce") buildAnnoncePane("A");
   if(name==="volumetrie") buildAdminVolumetrie();
+  if(name==="croisement") buildCroisementView();
 }
 document.getElementById("adminSubUsers").addEventListener("click", ()=> adminSwitchSub("users"));
 document.getElementById("adminSubLog").addEventListener("click", ()=> adminSwitchSub("log"));
@@ -2927,6 +3284,7 @@ document.getElementById("adminSubAppreciations").addEventListener("click", ()=> 
 document.getElementById("adminSubReport").addEventListener("click", ()=> adminSwitchSub("report"));
 document.getElementById("adminSubAnnonce").addEventListener("click", ()=> adminSwitchSub("annonce"));
 document.getElementById("adminSubVolumetrie").addEventListener("click", ()=> adminSwitchSub("volumetrie"));
+document.getElementById("adminSubCroisement").addEventListener("click", ()=> adminSwitchSub("croisement"));
 
 const ROLE_LABELS = {
   inspecteur:"Inspecteur (RPO)", manager:"Manager",
@@ -3561,6 +3919,17 @@ function sectionTauxFromStatuts(sec, statuts){
 }
 
 let lastMonthlyReport = null;
+// Renvoie les clés "AAAA-MM" du mois donné et des 2 mois calendaires précédents
+function last3MoisKeys(monthInput){
+  const [y,m] = monthInput.split("-").map(Number);
+  const keys = [];
+  for(let i=0;i<3;i++){
+    let year=y, month=m-i;
+    while(month<=0){ month+=12; year-=1; }
+    keys.push(year+"-"+String(month).padStart(2,"0"));
+  }
+  return keys;
+}
 let reportPaneInitDone = false;
 function initReportPane(){
   if(!reportPaneInitDone){
@@ -4208,6 +4577,79 @@ function renderVolumetrieComparatif(){
 }
 document.getElementById("volumetrieCompFrom").addEventListener("change", renderVolumetrieComparatif);
 document.getElementById("volumetrieCompTo").addEventListener("change", renderVolumetrieComparatif);
+
+// ======================================================================
+// CROISEMENT CONFORMITÉ × VOLUMÉTRIE (sous-onglet dédié)
+// ======================================================================
+async function buildCroisementView(){
+  const status = document.getElementById("croisementStatus");
+  const body = document.getElementById("croisementBody");
+  status.textContent = "Chargement…";
+  body.innerHTML = "";
+
+  let all = [];
+  try{ all = await getAllVisites(); }
+  catch(e){ status.textContent = "Impossible de charger les données — vérifie ta connexion internet."; return; }
+
+  // Dernière visite approuvée/clôturée de chaque agence, sans restriction de mois
+  const finalized = all.filter(r=> r.closed || r.approved);
+  const byAgence = {};
+  finalized.forEach(r=>{
+    const key = (r.agence||"").trim().toLowerCase();
+    if(!byAgence[key] || (r.date||"") > (byAgence[key].date||"")) byAgence[key] = r;
+  });
+
+  const scopedAgencesCroisement = (currentRole === "directeur_regional")
+    ? agencesForRegionAll(currentUserRegion)
+    : allAgenceNames();
+  const now = new Date();
+  const currentMonthKey = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
+  const moisKeysCroisement = last3MoisKeys(currentMonthKey);
+
+  let croisementRows = [];
+  try{
+    const { data: volRows, error } = await sb.from("volumetrie_colis").select("agence, mois_key, colis_expedies").in("mois_key", moisKeysCroisement);
+    if(error) throw error;
+    const volByAgence = {};
+    (volRows||[]).forEach(r=>{
+      const key = stripGuepexSuffix(r.agence);
+      if(!volByAgence[key]) volByAgence[key] = { sum:0, n:0 };
+      volByAgence[key].sum += Number(r.colis_expedies)||0;
+      volByAgence[key].n += 1;
+    });
+    // Toutes les agences du périmètre (Admin/Manager/DG national, DR limité à sa région)
+    // Impact = volume expédié × écart à l'objectif (plafonné à 0 si l'agence atteint/dépasse l'objectif)
+    const OBJECTIF_IMPACT = 0.80;
+    croisementRows = scopedAgencesCroisement.map(agence=>{
+      const rec = byAgence[agence.trim().toLowerCase()];
+      const taux = rec ? rec.taux : null;
+      const v = volByAgence[stripGuepexSuffix(agence)];
+      const volumeMoy = v ? Math.round(v.sum/v.n) : null;
+      const impact = (taux!=null && volumeMoy!=null) ? Math.round(volumeMoy * Math.max(0, OBJECTIF_IMPACT - taux)) : null;
+      return { agence, taux, volumeMoy, impact };
+    }).sort((a,b)=>{
+      if(a.impact==null && b.impact==null) return a.agence.localeCompare(b.agence);
+      if(a.impact==null) return 1;
+      if(b.impact==null) return -1;
+      return b.impact - a.impact;
+    });
+  }catch(e){ console.warn("Croisement Conformité × Volumétrie : chargement impossible.", e); }
+
+  if(croisementRows.length === 0){
+    body.innerHTML = `<tr><td colspan="4" class="agence-empty">Aucune agence dans ce périmètre.</td></tr>`;
+  } else {
+    croisementRows.forEach(c=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(c.agence)}</td>
+        <td>${c.taux==null ? '<span style="color:var(--muted);">n/a</span>' : `<span class="taux-tag" style="${tierTagStyle(c.taux)}">${Math.round(c.taux*100)}%</span>`}</td>
+        <td>${c.volumeMoy==null ? '<span style="color:var(--muted);">n/a</span>' : c.volumeMoy}</td>
+        <td>${c.impact==null ? '<span style="color:var(--muted);">n/a</span>' : c.impact}</td>`;
+      body.appendChild(tr);
+    });
+  }
+  status.textContent = croisementRows.length+" agence"+(croisementRows.length>1?"s":"")+" (temps réel).";
+}
 
 
 // ORDRES DE MISSION
@@ -4942,6 +5384,7 @@ function applyRoleUI(){
   document.getElementById("adminSubAnnonce").style.display = (currentRole === "admin") ? "" : "none";
   document.getElementById("adminSubReport").style.display = (currentRole === "directeur_regional") ? "none" : "";
   document.getElementById("adminSubVolumetrie").style.display = canSeeAdminTab ? "" : "none";
+  document.getElementById("adminSubCroisement").style.display = canSeeAdminTab ? "" : "none";
   document.getElementById("volumetrieImportRow").style.display = (currentRole === "admin") ? "" : "none";
 
   document.getElementById("tabAnnonce").style.display = (currentRole === "manager") ? "" : "none";
@@ -5030,6 +5473,21 @@ function setupRealtime(){
       const adminActive = document.getElementById("viewAdmin").classList.contains("active");
       const apprSubActive = document.getElementById("adminPaneAppreciations") && document.getElementById("adminPaneAppreciations").style.display !== "none";
       if(adminActive && apprSubActive) renderAdminAppreciations();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"correction_taches"}, ()=>{
+      // Rafraîchit la vue concernée si elle est actuellement affichée (DR par agence, ou Manager par point)
+      const dashActive = document.getElementById("viewDashboard") && document.getElementById("viewDashboard").classList.contains("active");
+      const anomaliesShown = document.getElementById("dashAnomaliesTable") && document.getElementById("dashAnomaliesTable").style.display !== "none";
+      const pointsShown = document.getElementById("dashPointsTable") && document.getElementById("dashPointsTable").style.display !== "none";
+      if(dashActive && anomaliesShown) buildRegionAnomalies();
+      if(dashActive && pointsShown) buildManagerPointsView();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"correction_point_echeances"}, ()=>{
+      const dashActive = document.getElementById("viewDashboard") && document.getElementById("viewDashboard").classList.contains("active");
+      const anomaliesShown = document.getElementById("dashAnomaliesTable") && document.getElementById("dashAnomaliesTable").style.display !== "none";
+      const pointsShown = document.getElementById("dashPointsTable") && document.getElementById("dashPointsTable").style.display !== "none";
+      if(dashActive && anomaliesShown) buildRegionAnomalies();
+      if(dashActive && pointsShown) buildManagerPointsView();
     })
     .subscribe();
 }
