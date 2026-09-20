@@ -857,10 +857,10 @@
     <div id="adminPaneVolumetrie" style="display:none;">
       <div id="volumetrieImportRow">
         <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
-          Importe un fichier Excel avec des totaux déjà agrégés par agence (colonnes attendues :
-          <em>Mois</em>, <em>Agence</em>, <em>Colis expédiés</em>, <em>Colis livrés</em> — les noms de
-          colonnes proches sont reconnus automatiquement). Réimporter un mois déjà présent remplace ses
-          lignes sans toucher aux autres mois.
+          Importe un fichier Excel avec des totaux déjà agrégés par agence (colonnes obligatoires :
+          <em>Mois</em>, <em>Agence</em>, <em>Colis expédiés</em>, <em>Colis reçu SD</em>,
+          <em>Colis livré SD</em> — les noms de colonnes proches sont reconnus automatiquement).
+          Réimporter un mois déjà présent remplace ses lignes sans toucher aux autres mois.
         </p>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
           <label class="btn light" style="padding:8px 14px;border-radius:8px;cursor:pointer;">
@@ -880,16 +880,19 @@
           </select>
         </label>
       </div>
+      <div style="overflow-x:auto;">
       <table class="dash" id="volumetrieTable" style="max-width:640px;">
         <thead><tr>
           <th data-sort="agence" style="cursor:pointer;">Agence <span class="volu-sort-arrow" data-arrow="agence"></span></th>
           <th data-sort="colis_expedies" style="cursor:pointer;">Colis expédiés <span class="volu-sort-arrow" data-arrow="colis_expedies"></span></th>
-          <th data-sort="colis_livres" style="cursor:pointer;">Colis livrés <span class="volu-sort-arrow" data-arrow="colis_livres"></span></th>
+          <th data-sort="colis_recus_sd" style="cursor:pointer;">Colis reçu SD <span class="volu-sort-arrow" data-arrow="colis_recus_sd"></span></th>
+          <th data-sort="colis_livres_sd" style="cursor:pointer;">Colis livré SD <span class="volu-sort-arrow" data-arrow="colis_livres_sd"></span></th>
           <th data-sort="taux" style="cursor:pointer;">Taux de livraison <span class="volu-sort-arrow" data-arrow="taux"></span></th>
         </tr></thead>
         <tbody id="volumetrieBody"></tbody>
         <tfoot id="volumetrieFoot"></tfoot>
       </table>
+      </div>
 
       <h3 style="font-size:14px;margin:28px 0 10px;">Top / Flop agences du mois (volume expédié)</h3>
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
@@ -4300,9 +4303,10 @@ async function parseVolumetrieFile(file){
     const colMois = findColumn(headers, ["mois"]);
     const colAgence = findColumn(headers, ["agence"]);
     const colExp = findColumn(headers, ["colis expedie","expedie","exp total","exp"]);
-    const colLiv = findColumn(headers, ["colis livre","livre","liv total","liv"]);
-    if(!colMois || !colAgence || !colExp || !colLiv){
-      throw new Error("Colonnes introuvables — attendu : Mois, Agence, Colis expédiés, Colis livrés.");
+    const colRecuSD = findColumn(headers, ["colis recu sd","recu sd","recus sd"]);
+    const colLivSD = findColumn(headers, ["colis livre sd","livre sd","livres sd"]);
+    if(!colMois || !colAgence || !colExp || !colRecuSD || !colLivSD){
+      throw new Error("Colonnes introuvables — attendu : Mois, Agence, Colis expédiés, Colis reçu SD, Colis livré SD.");
     }
 
     const parsed = rows.map(r=> ({
@@ -4310,7 +4314,8 @@ async function parseVolumetrieFile(file){
       mois_key: moisLabelToKey(r[colMois]),
       agence: String(r[colAgence]).trim(),
       colis_expedies: Number(r[colExp]) || 0,
-      colis_livres: Number(r[colLiv]) || 0,
+      colis_recus_sd: Number(r[colRecuSD]) || 0,
+      colis_livres_sd: Number(r[colLivSD]) || 0,
       updated_at: new Date().toISOString(),
       updated_by: currentUser.id
     })).filter(r=> r.agence && r.mois_label); // ignore les lignes vides (ex. liste déroulante de référence)
@@ -4400,15 +4405,15 @@ function renderVolumetrieTable(){
   const agenceFiltre = agenceSelect.value;
   const rows = volumetrieRaw
     .filter(r=> r.mois_label === mois && (!agenceFiltre || r.agence === agenceFiltre))
-    .map(r=> ({...r, taux: r.colis_expedies>0 ? r.colis_livres/r.colis_expedies : null}));
+    .map(r=> ({...r, taux: r.colis_recus_sd>0 ? r.colis_livres_sd/r.colis_recus_sd : null}));
 
   const { col, dir } = volumetrieSort;
   rows.sort((a,b)=>{
     let va = a[col], vb = b[col];
     if(col === "agence") return dir * va.localeCompare(vb);
     // valeurs manquantes (taux n/a) toujours en dernier, quel que soit le sens du tri
-    if(va===null) return 1;
-    if(vb===null) return -1;
+    if(va===null||va===undefined) return 1;
+    if(vb===null||vb===undefined) return -1;
     return dir * (va - vb);
   });
 
@@ -4417,20 +4422,22 @@ function renderVolumetrieTable(){
   });
 
   body.innerHTML = "";
-  let totalExp = 0, totalLiv = 0;
+  let totalExp = 0, totalRecuSD = 0, totalLivSD = 0;
   rows.forEach(r=>{
     const taux = r.taux;
     const [bg,fg] = taux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(taux);
-    totalExp += r.colis_expedies; totalLiv += r.colis_livres;
+    totalExp += r.colis_expedies; totalRecuSD += r.colis_recus_sd||0; totalLivSD += r.colis_livres_sd||0;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.agence}</td><td>${r.colis_expedies}</td><td>${r.colis_livres}</td>
+    tr.innerHTML = `<td>${r.agence}</td><td>${r.colis_expedies}</td>
+      <td>${r.colis_recus_sd==null?'<span style="color:var(--muted);">n/a</span>':r.colis_recus_sd}</td>
+      <td>${r.colis_livres_sd==null?'<span style="color:var(--muted);">n/a</span>':r.colis_livres_sd}</td>
       <td><span style="background:${bg};color:${fg};padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${taux===null?"n/a":Math.round(taux*100)+"%"}</span></td>`;
     body.appendChild(tr);
   });
-  const totalTaux = totalExp>0 ? totalLiv/totalExp : null;
+  const totalTaux = totalRecuSD>0 ? totalLivSD/totalRecuSD : null;
   const [tbg,tfg] = totalTaux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(totalTaux);
   foot.innerHTML = rows.length ? `<tr style="font-weight:800;border-top:2px solid var(--line);">
-      <td>Total</td><td>${totalExp}</td><td>${totalLiv}</td>
+      <td>Total</td><td>${totalExp}</td><td>${totalRecuSD}</td><td>${totalLivSD}</td>
       <td><span style="background:${tbg};color:${tfg};padding:3px 9px;border-radius:6px;font-weight:700;font-size:12.5px;">${totalTaux===null?"n/a":Math.round(totalTaux*100)+"%"}</span></td>
     </tr>` : "";
 
