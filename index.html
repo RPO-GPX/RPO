@@ -422,7 +422,7 @@
     <div class="tabs">
       <button class="tab active" id="tabInspection">Visite</button>
       <button class="tab" id="tabDashboard">Tableau de bord</button>
-      <button class="tab" id="tabEvolution">Évolution agence</button>
+      <button class="tab" id="tabEvolution">Fiche agence</button>
       <button class="tab" id="tabAnalyse">Analyse</button>
       <button class="tab" id="tabOM" style="display:none;position:relative;">Ordres de mission<span id="omBadge" class="tab-badge" style="display:none;"></span></button>
       <button class="tab" id="tabAnnonce" style="display:none;">Annonce</button>
@@ -547,7 +547,7 @@
 <div class="view" id="viewEvolution">
   <div class="dash-wrap">
     <div class="dash-toolbar">
-      <h2 style="margin:0;font-size:18px;">Évolution de la conformité par agence</h2>
+      <h2 style="margin:0;font-size:18px;">Fiche agence</h2>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status" id="evolStatus"></span>
       </div>
@@ -577,6 +577,22 @@
           <div style="font-size:22px;font-weight:700;" id="evolStatTrend">–</div>
         </div>
       </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:16px;">
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Volumétrie (dernier mois disponible)</div>
+          <div id="evolVolumetrie" style="font-size:13px;color:var(--muted);">Chargement…</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Corrections en cours</div>
+          <div id="evolCorrections" style="font-size:13px;color:var(--muted);">Chargement…</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Dernière visite</div>
+          <div id="evolDerniereVisite" style="font-size:13px;color:var(--muted);">Chargement…</div>
+        </div>
+      </div>
+
       <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;overflow-x:auto;">
         <svg id="evolChart" width="100%" height="280" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet"></svg>
       </div>
@@ -5031,6 +5047,10 @@ async function buildEvolutionChart(agenceName){
   lastEl.style.color = tierBarColor(last.taux);
   document.getElementById("evolStatAvg").textContent = Math.round(avg*100)+"%";
 
+  renderFicheVolumetrie(agenceName);
+  renderFicheDerniereVisite(last);
+  renderFicheCorrections(agenceName, visites);
+
   const trendEl = document.getElementById("evolStatTrend");
   if(visites.length < 2){
     trendEl.textContent = "—";
@@ -5064,6 +5084,75 @@ async function buildEvolutionChart(agenceName){
     `;
     tbody.appendChild(tr);
   });
+}
+
+// ---- Fiche agence : Volumétrie (dernier mois disponible) ----
+async function renderFicheVolumetrie(agenceName){
+  const el = document.getElementById("evolVolumetrie");
+  el.textContent = "Chargement…";
+  try{
+    const { data, error } = await sb.from("volumetrie_colis").select("*").order("mois_key", {ascending:false});
+    if(error) throw error;
+    const key = stripGuepexSuffix(agenceName);
+    const row = (data||[]).find(r=> stripGuepexSuffix(r.agence) === key);
+    if(!row){
+      el.innerHTML = `<span style="color:var(--muted);">Aucune donnée de volumétrie pour cette agence.</span>`;
+      return;
+    }
+    const taux = row.colis_recus_sd>0 ? row.colis_livres_sd/row.colis_recus_sd : null;
+    const [bg,fg] = taux===null ? ["var(--na-bg)","var(--na-fg)"] : tierColors(taux);
+    el.innerHTML = `
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">${escapeHtml(row.mois_label)}</div>
+      <div>Colis expédiés : <b>${row.colis_expedies}</b></div>
+      <div>Colis reçu SD : <b>${row.colis_recus_sd}</b></div>
+      <div>Colis livré SD : <b>${row.colis_livres_sd}</b></div>
+      <div style="margin-top:6px;">Taux de livraison : <span style="background:${bg};color:${fg};padding:3px 9px;border-radius:6px;font-weight:700;">${taux===null?"n/a":Math.round(taux*100)+"%"}</span></div>
+    `;
+  }catch(e){ el.innerHTML = `<span style="color:#a11313;">Chargement impossible.</span>`; }
+}
+
+// ---- Fiche agence : infos de la dernière visite ----
+function renderFicheDerniereVisite(rec){
+  const el = document.getElementById("evolDerniereVisite");
+  el.innerHTML = `
+    <div>Date : <b>${rec.date || "-"}</b></div>
+    <div>Effectif : <b>${rec.nb_employes ?? "n/a"}</b></div>
+    <div>Livreurs : <b>${rec.nb_livreurs ?? "n/a"}</b></div>
+    <div>Agents de sécurité : <b>${rec.nb_agents_securite ?? "n/a"}</b></div>
+    ${rec.commentaire_general ? `<div style="margin-top:6px;padding:6px 8px;background:#f6f4ee;border-radius:6px;font-size:12px;white-space:pre-wrap;">${escapeHtml(rec.commentaire_general)}</div>` : ""}
+  `;
+}
+
+// ---- Fiche agence : corrections en cours (échéances/statuts des points non conformes) ----
+async function renderFicheCorrections(agenceName, visitesForAgence){
+  const el = document.getElementById("evolCorrections");
+  el.textContent = "Chargement…";
+  try{
+    const last = visitesForAgence[visitesForAgence.length-1];
+    if(!last){ el.innerHTML = `<span style="color:var(--muted);">Aucune visite.</span>`; return; }
+    const points = allNonConformPoints(last);
+    if(points.length === 0){
+      el.innerHTML = `<span style="color:var(--ok-fg);">✓ Aucune non-conformité sur la dernière visite.</span>`;
+      return;
+    }
+    const { data: taches, error } = await sb.from("correction_taches").select("*").eq("visite_id", last.id);
+    if(error) throw error;
+    const tachesByItem = {};
+    (taches||[]).forEach(t=> tachesByItem[t.item_id] = t);
+    const todayISO = new Date().toISOString().slice(0,10);
+    const nbFait = points.filter(p=> tachesByItem[p.id] && tachesByItem[p.id].statut==="fait").length;
+    let html = `<div style="margin-bottom:6px;">${nbFait}/${points.length} point${points.length>1?"s":""} corrigé${nbFait>1?"s":""}</div>`;
+    points.forEach(p=>{
+      const t = tachesByItem[p.id];
+      const fait = t && t.statut === "fait";
+      const enRetard = t && t.statut==="a_faire" && t.echeance && t.echeance < todayISO;
+      html += `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:12px;">
+        <span>${escapeHtml(p.label)}</span>
+        <span style="white-space:nowrap;color:${fait?'var(--ok-fg)':(enRetard?'#a11313':'var(--muted)')};font-weight:700;">${fait?"✓ Fait":(t && t.echeance ? (enRetard?"⚠ "+t.echeance:t.echeance) : "Échéance à fixer")}</span>
+      </div>`;
+    });
+    el.innerHTML = html;
+  }catch(e){ el.innerHTML = `<span style="color:#a11313;">Chargement impossible.</span>`; }
 }
 
 function drawEvolutionSvg(visites){
