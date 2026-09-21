@@ -948,17 +948,20 @@
     <!-- ---- Croisement Conformité × Volumétrie ---- -->
     <div id="adminPaneCroisement" style="display:none;">
       <p style="font-size:13px;color:var(--muted);max-width:640px;margin:0 0 14px;">
-        Conformité de la dernière visite de chaque agence vs volume moyen de colis expédiés sur les
-        3 derniers mois calendaires. Le <b>ratio</b> = volume expédié × écart à l'objectif de 80%
-        (plafonné à 0 si l'agence atteint/dépasse l'objectif) : plus il est élevé, plus l'agence cumule
-        un fort volume de clients concernés et une conformité éloignée de l'objectif — un vrai signal
-        pour prioriser les interventions. Toutes les agences sont affichées, triées par ratio décroissant.
+        Ce tableau croise la conformité de la dernière visite de chaque agence avec son volume moyen
+        de colis expédiés sur les 3 derniers mois calendaires, pour repérer où intervenir en priorité.
+        L'<b>IPO</b> (Indice de Priorité Opérationnelle) résume ce croisement en un seul chiffre :
+        <br><b>IPO = volume expédié × écart à l'objectif de 80%</b> (l'écart est plafonné à 0 dès que
+        l'agence atteint ou dépasse l'objectif — une bonne agence n'a donc jamais d'IPO négatif).
+        Plus l'IPO est élevé, plus l'agence combine un fort volume de clients concernés et une
+        conformité éloignée de l'objectif : c'est elle qu'il faut traiter en premier. Toutes les
+        agences sont affichées, triées par IPO décroissant (la plus prioritaire en haut).
       </p>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
         <span id="croisementStatus" style="font-size:12.5px;"></span>
       </div>
       <table class="dash" id="croisementTable" style="max-width:640px;">
-        <thead><tr><th>Agence</th><th>Conformité</th><th>Volume expédié (moy. 3 mois)</th><th>Ratio</th></tr></thead>
+        <thead><tr><th>Agence</th><th>Conformité</th><th>Volume expédié (moy. 3 mois)</th><th>IPO</th></tr></thead>
         <tbody id="croisementBody"></tbody>
       </table>
     </div>
