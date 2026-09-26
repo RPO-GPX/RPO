@@ -1886,6 +1886,13 @@ function computeGlobals(){
   // Liste complète (actifs + désactivés) pour que les taux par section restent exacts
   // sur une ancienne visite, même si des points ont été désactivés depuis.
   historicalSectionsList().forEach(sec=>{
+    // Une section créée APRÈS cette visite n'a aucun de ses points renseigné dans
+    // state.status (ils n'existaient pas au moment de la saisie) : on l'exclut du
+    // détail par section pour ne pas la faire apparaître dans l'historique/l'imprimé
+    // d'une visite où elle n'existait pas encore.
+    const hasEntries = sec.items.some(([n])=> n!=="__sub__" &&
+      Object.prototype.hasOwnProperty.call(state.status, itemId(sec.key, n)));
+    if(!hasEntries) return;
     const s = sectionStats(sec);
     gConf += s.conforme; gNonConf += s.nonconforme;
     if(s.taux!==null){ sumW += sec.weight; sumWT += s.taux*sec.weight; }
