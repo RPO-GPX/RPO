@@ -175,8 +175,21 @@
   .tab{
     background:transparent; border:none; color:rgba(255,255,255,.65); font-weight:700;
     font-size:13px; padding:8px 4px; cursor:pointer; border-bottom:2px solid transparent;
+    display:flex; align-items:center; gap:7px;
   }
   .tab.active{ color:#fff; border-bottom-color:var(--red); }
+  .tab-icon{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:7px; font-size:12.5px; flex:0 0 auto;
+  }
+  .ic-overview{ background:#4f46e5; }
+  .ic-visite{ background:#2563eb; }
+  .ic-dash{ background:#0d9488; }
+  .ic-fiche{ background:#9333ea; }
+  .ic-analyse{ background:#ea580c; }
+  .ic-om{ background:#475569; }
+  .ic-annonce{ background:#db2777; }
+  .ic-admin{ background:#57606f; }
   .tab-badge{
     position:absolute; top:-2px; right:-8px;
     background:var(--red); color:#fff; font-size:10px; font-weight:800;
@@ -334,6 +347,31 @@
   }
   .pv-sig .sigline{ margin-top:44px; border-top:1px solid #000; }
 
+  /* ---------- barre latérale desktop (>760px) ---------- */
+  @media (min-width: 761px){
+    .topbar-row2{
+      position:fixed; left:0; top:var(--topbar-h, 58px); bottom:0; width:220px;
+      background:var(--navy); padding:14px 0; overflow-y:auto;
+      box-shadow:2px 0 12px rgba(0,0,0,.15); z-index:400; border-top:none;
+      flex-direction:column; align-items:stretch; flex-wrap:nowrap;
+    }
+    .topbar-row2 .tabs{ flex-direction:column; gap:2px; flex:0 0 auto; }
+    .topbar-row2 .tab{
+      justify-content:flex-start; padding:11px 18px; font-size:13.5px;
+      border-bottom:none; border-left:3px solid transparent;
+    }
+    .topbar-row2 .tab.active{ border-left-color:var(--red); background:rgba(255,255,255,.07); }
+    .topbar-row2 .tab-icon{ width:26px; height:26px; font-size:14px; }
+    .topbar-row2 .sep{ display:none; }
+    .topbar-row2 .topbar-ctx{
+      flex:0 0 auto; flex-direction:column; align-items:stretch; gap:8px;
+      padding:14px 18px 4px; margin-top:6px;
+      border-top:1px solid rgba(255,255,255,.12);
+    }
+    .topbar-row2 .taux-pill{ justify-content:space-between; }
+    .announce-banner, .view{ margin-left:220px; }
+  }
+
   /* ---------- corrections affichage mobile / petits écrans ---------- */
   @media (max-width: 760px){
     .header-card{ grid-template-columns:1fr; padding:16px; }
@@ -420,13 +458,14 @@
   </div>
   <div class="topbar-row topbar-row2">
     <div class="tabs">
-      <button class="tab active" id="tabInspection">Visite</button>
-      <button class="tab" id="tabDashboard">Tableau de bord</button>
-      <button class="tab" id="tabEvolution">Fiche agence</button>
-      <button class="tab" id="tabAnalyse">Analyse</button>
-      <button class="tab" id="tabOM" style="display:none;position:relative;">Ordres de mission<span id="omBadge" class="tab-badge" style="display:none;"></span></button>
-      <button class="tab" id="tabAnnonce" style="display:none;">Annonce</button>
-      <button class="tab" id="tabAdmin" style="display:none;">Administration</button>
+      <button class="tab active" id="tabOverview"><span class="tab-icon ic-overview">🏠</span><span class="tab-label">Vue d'ensemble</span></button>
+      <button class="tab" id="tabInspection"><span class="tab-icon ic-visite">📝</span><span class="tab-label">Visite</span></button>
+      <button class="tab" id="tabDashboard"><span class="tab-icon ic-dash">📊</span><span class="tab-label">Tableau de bord</span></button>
+      <button class="tab" id="tabEvolution"><span class="tab-icon ic-fiche">🏢</span><span class="tab-label">Fiche agence</span></button>
+      <button class="tab" id="tabAnalyse"><span class="tab-icon ic-analyse">🔍</span><span class="tab-label">Analyse</span></button>
+      <button class="tab" id="tabOM" style="display:none;position:relative;"><span class="tab-icon ic-om">📄</span><span class="tab-label">Ordres de mission</span><span id="omBadge" class="tab-badge" style="display:none;"></span></button>
+      <button class="tab" id="tabAnnonce" style="display:none;"><span class="tab-icon ic-annonce">📢</span><span class="tab-label">Annonce</span></button>
+      <button class="tab" id="tabAdmin" style="display:none;"><span class="tab-icon ic-admin">⚙️</span><span class="tab-label">Administration</span></button>
     </div>
     <div class="sep"></div>
     <div class="topbar-ctx" id="ctxInspection">
@@ -449,7 +488,16 @@
   </div>
 </div>
 
-<div class="view active" id="viewInspection">
+<div class="view active" id="viewOverview">
+  <div class="dash-wrap">
+    <h2 style="margin:0 0 16px;font-size:18px;">Vue d'ensemble</h2>
+    <div id="overviewGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+      <div style="grid-column:1/-1;color:var(--muted);font-size:13px;">Chargement…</div>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="viewInspection">
   <div class="header-card">
     <div class="field"><label>Agence</label>
       <input id="fAgence" list="agenceList" placeholder="Nom de l'agence">
@@ -1630,6 +1678,16 @@ async function getAllVisites(){
   return data || [];
 }
 
+// Version allégée pour la Vue d'ensemble : ne récupère que les colonnes utilisées
+// (pas la checklist complète / anomalies / commentaires) pour accélérer le chargement.
+async function getVisitesOverviewLite(){
+  const { data, error } = await sb.from("visites")
+    .select("id, agence, date, taux, closed, approved")
+    .order("date", {ascending:false});
+  if(error) throw error;
+  return data || [];
+}
+
 // ======================================================================
 // RENDU
 // ======================================================================
@@ -2283,6 +2341,115 @@ function correctionCellHTML(rec){
 }
 
 let managerAnomaliesView = false;
+
+// ======================================================================
+// VUE D'ENSEMBLE (écran d'accueil)
+// ======================================================================
+function overviewCard(iconClass, icon, title, valueHtml, subtitleHtml){
+  return `
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start;">
+      <div class="tab-icon ${iconClass}" style="width:36px;height:36px;border-radius:9px;font-size:18px;flex:0 0 auto;">${icon}</div>
+      <div style="min-width:0;">
+        <div style="font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;font-weight:700;margin-bottom:4px;">${title}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--ink);line-height:1.2;">${valueHtml}</div>
+        ${subtitleHtml ? `<div style="font-size:12px;color:var(--muted);margin-top:3px;">${subtitleHtml}</div>` : ""}
+      </div>
+    </div>`;
+}
+
+async function buildOverview(){
+  const grid = document.getElementById("overviewGrid");
+  grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:13px;">Chargement…</div>`;
+  const cards = [];
+  const isDR = (currentRole === "directeur_regional");
+  const scopedAgences = isDR ? agencesForRegionAll(currentUserRegion) : allAgenceNames();
+
+  // Assistant RH : ne voit que ses ordres de mission, pas de vue d'ensemble opérationnelle
+  if(currentRole === "assistant_rh"){
+    grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:13px;">Consulte l'onglet Ordres de mission.</div>`;
+    return;
+  }
+
+  try{
+    const all = await getVisitesOverviewLite();
+    const approved = all.filter(r=> r.approved === true);
+    const byAgence = {};
+    approved.forEach(r=>{
+      const key = (r.agence||"").trim().toLowerCase();
+      if(!byAgence[key] || (r.date||"") > (byAgence[key].date||"")) byAgence[key] = r;
+    });
+    const scopedLatest = scopedAgences.map(a=> byAgence[a.trim().toLowerCase()]).filter(Boolean);
+    const withTaux = scopedLatest.filter(r=> r.taux!=null);
+    const avgTaux = withTaux.length ? withTaux.reduce((s,r)=> s+r.taux,0)/withTaux.length : null;
+    cards.push(overviewCard("ic-dash", "📊", isDR ? "Taux moyen — région "+currentUserRegion : "Taux moyen — réseau",
+      avgTaux==null ? "n/a" : Math.round(avgTaux*100)+"%",
+      withTaux.length+" agence"+(withTaux.length>1?"s":"")+" avec visite approuvée"));
+
+    // Visites réalisées ce mois-ci (toutes visites clôturées/approuvées, périmètre du rôle)
+    const now = new Date();
+    const curMonthKey = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+    const scopedNames = new Set(scopedAgences.map(a=> a.trim().toLowerCase()));
+    const visitesCeMois = all.filter(r=> (r.closed||r.approved) && (r.date||"").startsWith(curMonthKey) && scopedNames.has((r.agence||"").trim().toLowerCase()));
+    cards.push(overviewCard("ic-visite", "📝", "Visites ce mois-ci", visitesCeMois.length, formatMonthLabel(curMonthKey)));
+
+    // IPO : top agences en alerte (fort volume × faible conformité)
+    try{
+      const moisKeys = last3MoisKeys(curMonthKey);
+      const { data: volRows } = await sb.from("volumetrie_colis").select("agence, mois_key, colis_expedies").in("mois_key", moisKeys);
+      const volByAgence = {};
+      (volRows||[]).forEach(r=>{
+        const key = stripGuepexSuffix(r.agence);
+        if(!volByAgence[key]) volByAgence[key] = { sum:0, n:0 };
+        volByAgence[key].sum += Number(r.colis_expedies)||0; volByAgence[key].n += 1;
+      });
+      const OBJECTIF_IMPACT = 0.80;
+      const ipoRows = scopedAgences.map(agence=>{
+        const rec = byAgence[agence.trim().toLowerCase()];
+        const taux = rec ? rec.taux : null;
+        const v = volByAgence[stripGuepexSuffix(agence)];
+        const volumeMoy = v ? Math.round(v.sum/v.n) : null;
+        const ipo = (taux!=null && volumeMoy!=null) ? Math.round(volumeMoy*Math.max(0, OBJECTIF_IMPACT-taux)) : null;
+        return { agence, ipo };
+      }).filter(r=> r.ipo!=null && r.ipo>0).sort((a,b)=> b.ipo-a.ipo).slice(0,3);
+      cards.push(overviewCard("ic-analyse", "⚠️", "Agences en alerte (IPO)",
+        ipoRows.length ? ipoRows.length : "0",
+        ipoRows.length ? ipoRows.map(r=> escapeHtml(r.agence)+" ("+r.ipo+")").join(", ") : "Aucune agence prioritaire"));
+    }catch(e){ cards.push(overviewCard("ic-analyse","⚠️","Agences en alerte (IPO)","n/a","Chargement impossible")); }
+
+    // Corrections en retard (échéance dépassée, statut à faire), sur le périmètre du rôle
+    try{
+      const visiteIdsScope = scopedLatest.map(r=> r.id);
+      let retard = 0;
+      if(visiteIdsScope.length){
+        const { data: taches } = await sb.from("correction_taches").select("*").in("visite_id", visiteIdsScope);
+        const todayISO = new Date().toISOString().slice(0,10);
+        retard = (taches||[]).filter(t=> t.statut==="a_faire" && t.echeance && t.echeance<todayISO).length;
+      }
+      cards.push(overviewCard("ic-fiche", "⏰", "Corrections en retard", retard, retard>0 ? "Échéance dépassée, non corrigées" : "Aucun retard"));
+    }catch(e){ cards.push(overviewCard("ic-fiche","⏰","Corrections en retard","n/a","Chargement impossible")); }
+
+    // Dernier import Volumétrie
+    try{
+      const { data: lastVol } = await sb.from("volumetrie_colis").select("mois_label, updated_at").order("updated_at", {ascending:false}).limit(1);
+      const v = lastVol && lastVol[0];
+      cards.push(overviewCard("ic-om", "📦", "Dernier import Volumétrie",
+        v ? escapeHtml(v.mois_label) : "Aucun",
+        v ? "Importé le "+new Date(v.updated_at).toLocaleDateString("fr-FR") : ""));
+    }catch(e){ cards.push(overviewCard("ic-om","📦","Dernier import Volumétrie","n/a","")); }
+
+    // Annonce active
+    try{
+      const today = new Date().toISOString().slice(0,10);
+      const { data } = await sb.from("announcements").select("*").eq("active", true).gte("end_date", today).order("created_at", {ascending:false}).limit(1);
+      const a = data && data[0];
+      cards.push(overviewCard("ic-annonce", "📢", "Annonce active", a ? "Oui" : "Aucune", a ? escapeHtml(a.message) : ""));
+    }catch(e){ cards.push(overviewCard("ic-annonce","📢","Annonce active","n/a","")); }
+
+    grid.innerHTML = cards.join("");
+  }catch(e){
+    grid.innerHTML = `<div style="grid-column:1/-1;color:#a11313;font-size:13px;">Impossible de charger la vue d'ensemble — vérifie ta connexion internet.</div>`;
+  }
+}
 
 async function buildDashboard(){
   await fetchCorrectionEnabled();
@@ -3231,7 +3398,14 @@ async function openHistory(agenceName, anchorRow){
   anchorRow.after(expandRow);
   expandRow.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
+function syncTopbarOffset(){
+  const row1 = document.querySelector(".topbar-row1");
+  if(row1) document.documentElement.style.setProperty("--topbar-h", row1.offsetHeight+"px");
+}
+window.addEventListener("resize", syncTopbarOffset);
+
 function switchView(name){
+  document.getElementById("viewOverview").classList.toggle("active", name==="overview");
   document.getElementById("viewInspection").classList.toggle("active", name==="inspection");
   document.getElementById("viewDashboard").classList.toggle("active", name==="dashboard");
   document.getElementById("viewEvolution").classList.toggle("active", name==="evolution");
@@ -3239,6 +3413,7 @@ function switchView(name){
   document.getElementById("viewOM").classList.toggle("active", name==="om");
   document.getElementById("viewAnnonce").classList.toggle("active", name==="annonce");
   document.getElementById("viewAdmin").classList.toggle("active", name==="admin");
+  document.getElementById("tabOverview").classList.toggle("active", name==="overview");
   document.getElementById("tabInspection").classList.toggle("active", name==="inspection");
   document.getElementById("tabDashboard").classList.toggle("active", name==="dashboard");
   document.getElementById("tabEvolution").classList.toggle("active", name==="evolution");
@@ -3248,6 +3423,7 @@ function switchView(name){
   document.getElementById("tabAdmin").classList.toggle("active", name==="admin");
   document.getElementById("ctxInspection").style.display = (name==="inspection") ? "flex" : "none";
   document.getElementById("ctxDashboard").style.display = (name==="dashboard") ? "flex" : "none";
+  if(name==="overview") buildOverview();
   if(name==="dashboard") buildDashboard();
   if(name==="evolution") initEvolutionView();
   if(name==="analyse") buildAnalyse();
@@ -3258,7 +3434,9 @@ function switchView(name){
     if(currentRole === "directeur_regional") adminSwitchSub("volumetrie");
     else buildAdminUsers();
   }
+  setTimeout(syncTopbarOffset, 0);
 }
+document.getElementById("tabOverview").addEventListener("click", ()=> switchView("overview"));
 document.getElementById("tabOM").addEventListener("click", ()=> switchView("om"));
 document.getElementById("tabAnnonce").addEventListener("click", ()=> switchView("annonce"));
 
@@ -5472,7 +5650,7 @@ function applyRoleUI(){
 
   const canSeeAdminTab = (currentRole === "admin" || currentRole === "manager" || currentRole === "directeur_general" || currentRole === "directeur_regional");
   document.getElementById("tabAdmin").style.display = canSeeAdminTab ? "" : "none";
-  document.getElementById("tabAdmin").textContent = (currentRole === "admin") ? "Administration" : (currentRole === "directeur_regional") ? "Volumétrie colis" : "Rapport mensuel";
+  document.querySelector("#tabAdmin .tab-label").textContent = (currentRole === "admin") ? "Administration" : (currentRole === "directeur_regional") ? "Volumétrie colis" : "Rapport mensuel";
   document.getElementById("adminTitle").textContent = (currentRole === "admin") ? "Administration" : (currentRole === "directeur_regional") ? "Volumétrie colis" : "Rapport mensuel";
   document.getElementById("adminSubTabsBar").style.display = canSeeAdminTab ? "" : "none";
   document.getElementById("adminSubUsers").style.display = (currentRole === "admin") ? "" : "none";
@@ -5490,6 +5668,7 @@ function applyRoleUI(){
 
   if(isAssistantRH){
     // Accès strictement limité à l'onglet Ordres de mission (ordres validés uniquement, en lecture)
+    document.getElementById("tabOverview").style.display = "none";
     document.getElementById("tabInspection").style.display = "none";
     document.getElementById("tabDashboard").style.display = "none";
     document.getElementById("tabEvolution").style.display = "none";
@@ -5501,17 +5680,17 @@ function applyRoleUI(){
     document.getElementById("btnExpandAll").style.display = "none";
     document.getElementById("btnPrint").style.display = "none";
     document.getElementById("btnClose").style.display = "none";
-    switchView("dashboard");
+    switchView("overview");
   } else if(currentRole === "admin"){
-    // accès complet : garde tout visible (onglet Visite + Tableau de bord, tous les boutons), démarre sur le tableau de bord
+    // accès complet : garde tout visible (onglet Visite + Tableau de bord, tous les boutons), démarre sur la vue d'ensemble
     document.getElementById("tabInspection").style.display = "";
     document.getElementById("btnNew").style.display = "";
     document.getElementById("btnExpandAll").style.display = "";
     document.getElementById("btnPrint").style.display = "";
     document.getElementById("btnClose").style.display = "";
-    switchView("dashboard");
+    switchView("overview");
   } else {
-    switchView("inspection");
+    switchView("overview");
   }
 }
 
@@ -5679,6 +5858,7 @@ async function completeLogin(){
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("nameScreen").style.display = "none";
   bindHeader();
+  syncTopbarOffset();
   await loadAgencesStructure();
   fillAgenceList();
   await loadAppreciationTiers();
