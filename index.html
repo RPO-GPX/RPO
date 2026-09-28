@@ -2092,9 +2092,9 @@ function buildPrintView(){
   } else {
     ncList.forEach(nc=>{
       const tr = document.createElement("tr");
-      const anomText = nc.anom ? nc.anom : "⚠ Non renseignée";
+      const anomText = nc.anom ? escapeHtml(nc.anom) : "⚠ Non renseignée";
       const anomClass = nc.anom ? "anom" : "anom missing";
-      tr.innerHTML = `<td class="sec">${nc.section}</td><td>${nc.label}</td><td class="${anomClass}">${anomText}</td>`;
+      tr.innerHTML = `<td class="sec">${escapeHtml(nc.section)}</td><td>${escapeHtml(nc.label)}</td><td class="${anomClass}">${anomText}</td>`;
       tbody.appendChild(tr);
     });
   }
@@ -2378,6 +2378,13 @@ async function buildOverview(){
   }
 
   try{
+    // Requêtes indépendantes lancées en parallèle (au lieu de l'une après l'autre)
+    const nowD = new Date();
+    const curMonthKeyP = nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0");
+    const todayP = nowD.toISOString().slice(0,10);
+    const volP = sb.from("volumetrie_colis").select("agence, mois_key, colis_expedies").in("mois_key", last3MoisKeys(curMonthKeyP));
+    const lastVolP = sb.from("volumetrie_colis").select("mois_label, updated_at").order("updated_at", {ascending:false}).limit(1);
+    const annP = sb.from("announcements").select("*").eq("active", true).gte("end_date", todayP).order("created_at", {ascending:false}).limit(1);
     const all = await getVisitesOverviewLite();
     const approved = all.filter(r=> r.approved === true);
     const byAgence = {};
@@ -2399,10 +2406,16 @@ async function buildOverview(){
     const visitesCeMois = all.filter(r=> (r.closed||r.approved) && (r.date||"").startsWith(curMonthKey) && scopedNames.has((r.agence||"").trim().toLowerCase()));
     cards.push(overviewCard("ic-visite", "📝", "Visites ce mois-ci", visitesCeMois.length, formatMonthLabel(curMonthKey)));
 
+    // Corrections en retard : requête lancée dès que le périmètre est connu
+    const visiteIdsScope = scopedLatest.map(r=> r.id);
+    const tachesP = visiteIdsScope.length
+      ? sb.from("correction_taches").select("statut, echeance").in("visite_id", visiteIdsScope)
+      : Promise.resolve({ data: [], error: null });
+
     // IPO : top agences en alerte (fort volume × faible conformité)
     try{
-      const moisKeys = last3MoisKeys(curMonthKey);
-      const { data: volRows } = await sb.from("volumetrie_colis").select("agence, mois_key, colis_expedies").in("mois_key", moisKeys);
+      const { data: volRows, error: volErr } = await volP;
+      if(volErr) throw volErr;
       const volByAgence = {};
       (volRows||[]).forEach(r=>{
         const key = stripGuepexSuffix(r.agence);
@@ -2425,19 +2438,17 @@ async function buildOverview(){
 
     // Corrections en retard (échéance dépassée, statut à faire), sur le périmètre du rôle
     try{
-      const visiteIdsScope = scopedLatest.map(r=> r.id);
-      let retard = 0;
-      if(visiteIdsScope.length){
-        const { data: taches } = await sb.from("correction_taches").select("*").in("visite_id", visiteIdsScope);
-        const todayISO = new Date().toISOString().slice(0,10);
-        retard = (taches||[]).filter(t=> t.statut==="a_faire" && t.echeance && t.echeance<todayISO).length;
-      }
+      const { data: taches, error: tachesErr } = await tachesP;
+      if(tachesErr) throw tachesErr;
+      const todayISO = new Date().toISOString().slice(0,10);
+      const retard = (taches||[]).filter(t=> t.statut==="a_faire" && t.echeance && t.echeance<todayISO).length;
       cards.push(overviewCard("ic-fiche", "⏰", "Corrections en retard", retard, retard>0 ? "Échéance dépassée, non corrigées" : "Aucun retard"));
     }catch(e){ cards.push(overviewCard("ic-fiche","⏰","Corrections en retard","n/a","Chargement impossible")); }
 
     // Dernier import Volumétrie
     try{
-      const { data: lastVol } = await sb.from("volumetrie_colis").select("mois_label, updated_at").order("updated_at", {ascending:false}).limit(1);
+      const { data: lastVol, error: lastVolErr } = await lastVolP;
+      if(lastVolErr) throw lastVolErr;
       const v = lastVol && lastVol[0];
       cards.push(overviewCard("ic-om", "📦", "Dernier import Volumétrie",
         v ? escapeHtml(v.mois_label) : "Aucun",
@@ -2446,8 +2457,8 @@ async function buildOverview(){
 
     // Annonce active
     try{
-      const today = new Date().toISOString().slice(0,10);
-      const { data } = await sb.from("announcements").select("*").eq("active", true).gte("end_date", today).order("created_at", {ascending:false}).limit(1);
+      const { data, error: annErr } = await annP;
+      if(annErr) throw annErr;
       const a = data && data[0];
       cards.push(overviewCard("ic-annonce", "📢", "Annonce active", a ? "Oui" : "Aucune", a ? escapeHtml(a.message) : ""));
     }catch(e){ cards.push(overviewCard("ic-annonce","📢","Annonce active","n/a","")); }
@@ -2909,9 +2920,9 @@ function openAgencyAnomalies(group, anchorRow, isManagerView){
     row.style.gap = "2px";
     row.style.cssText += enRetard ? "background:#fdecec;border-radius:6px;padding:6px;" : "";
     row.innerHTML = `
-      <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
-      <div style="font-size:12.5px;">${p.label}</div>
-      <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${escapeHtml(p.section)}</div>
+      <div style="font-size:12.5px;">${escapeHtml(p.label)}</div>
+      <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? escapeHtml(p.anomalie) : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
       <div class="tache-controls" style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
         ${isManagerView ? `
           <label style="font-size:11px;color:var(--muted);">Échéance
@@ -3194,9 +3205,9 @@ function openPreviousVisiteAnomalies(g, anchorRow){
       row.style.alignItems = "stretch";
       row.style.gap = "2px";
       row.innerHTML = `
-        <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${p.section}</div>
-        <div style="font-size:12.5px;">${p.label}</div>
-        <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? p.anomalie : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.4px;">${escapeHtml(p.section)}</div>
+        <div style="font-size:12.5px;">${escapeHtml(p.label)}</div>
+        <div style="font-size:12.5px;color:var(--muted);">${p.anomalie ? escapeHtml(p.anomalie) : '<span style="color:#a11313;">⚠ Anomalie non renseignée</span>'}</div>
       `;
       td.appendChild(row);
     });
