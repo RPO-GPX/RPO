@@ -477,11 +477,6 @@
       <button class="btn ghost" id="btnClose">Clôturer la visite</button>
       <button class="btn primary" id="btnPrint">Imprimer la synthèse</button>
     </div>
-    <div class="topbar-ctx" id="ctxDashboard" style="display:none;">
-      <div class="taux-pill" id="pillTotalEmployes" style="display:none;">Personnel total <b id="tbTotalEmployes">–</b></div>
-      <div class="taux-pill" id="pillTotalLivreurs" style="display:none;">Total livreurs <b id="tbTotalLivreurs">–</b></div>
-      <div class="taux-pill" id="pillTotalSecurite" style="display:none;">Total agents de sécurité <b id="tbTotalSecurite">–</b></div>
-    </div>
   </div>
   <div class="announce-banner" id="announceBanner" style="display:none;">
     📢 <span id="announceText"></span>
@@ -1682,7 +1677,7 @@ async function getAllVisites(){
 // (pas la checklist complète / anomalies / commentaires) pour accélérer le chargement.
 async function getVisitesOverviewLite(){
   const { data, error } = await sb.from("visites")
-    .select("id, agence, date, taux, closed, approved")
+    .select("id, agence, date, taux, closed, approved, nb_employes, nb_livreurs, nb_agents_securite")
     .order("date", {ascending:false});
   if(error) throw error;
   return data || [];
@@ -2399,6 +2394,30 @@ async function buildOverview(){
       avgTaux==null ? "n/a" : Math.round(avgTaux*100)+"%",
       withTaux.length+" agence"+(withTaux.length>1?"s":"")+" avec visite approuvée"));
 
+    // Personnel total / livreurs / agents de sécurité (déplacé depuis la barre latérale du Tableau de bord)
+    if(["admin","manager","directeur_regional","directeur_general"].includes(currentRole)){
+      const staffingRecs = isDR
+        ? scopedLatest
+        : scopedAgences.map(a=>{
+            const key = a.trim().toLowerCase();
+            let latest = null;
+            all.forEach(r=>{ if((r.agence||"").trim().toLowerCase()===key && (!latest || (r.date||"")>(latest.date||""))) latest = r; });
+            return latest;
+          }).filter(Boolean);
+      const scopeLabel = isDR ? ("région "+currentUserRegion) : "réseau";
+      const sumField = (field)=>{
+        let sum=0, n=0;
+        staffingRecs.forEach(r=>{ const v=parseInt(r[field],10); if(!isNaN(v)){ sum+=v; n++; } });
+        return { sum, n };
+      };
+      const emp = sumField("nb_employes");
+      cards.push(overviewCard("ic-dash", "👥", "Personnel total — "+scopeLabel, emp.sum, emp.n+"/"+staffingRecs.length+" agences"));
+      const liv = sumField("nb_livreurs");
+      cards.push(overviewCard("ic-dash", "🛵", "Total livreurs — "+scopeLabel, liv.sum, liv.n+"/"+staffingRecs.length+" agences"));
+      const sec = sumField("nb_agents_securite");
+      cards.push(overviewCard("ic-dash", "🛡️", "Total agents de sécurité — "+scopeLabel, sec.sum, sec.n+"/"+staffingRecs.length+" agences"));
+    }
+
     // Visites réalisées ce mois-ci (toutes visites clôturées/approuvées, périmètre du rôle)
     const now = new Date();
     const curMonthKey = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
@@ -2538,26 +2557,12 @@ async function buildDashboard(){
 
   const tbody = document.getElementById("dashBody");
   tbody.innerHTML = "";
-  const showEmployesCol = (currentRole === "manager" || currentRole === "directeur_general" || currentRole === "admin");
   let rank = 0;
-  let totalEmployes = 0;
-  let agencesAvecEffectif = 0;
-  let totalLivreurs = 0;
-  let agencesAvecLivreurs = 0;
-  let totalSecurite = 0;
-  let agencesAvecSecurite = 0;
   rows.forEach(r=>{
     rank++;
     const tr = document.createElement("tr");
     tr.dataset.agence = normalizeSearch(r.name);
     if(r.rec){
-      const nbEmployes = parseInt(r.rec.nb_employes, 10);
-      const nbEmployesValid = !isNaN(nbEmployes);
-      if(nbEmployesValid){ totalEmployes += nbEmployes; agencesAvecEffectif++; }
-      const nbLivreurs = parseInt(r.rec.nb_livreurs, 10);
-      if(!isNaN(nbLivreurs)){ totalLivreurs += nbLivreurs; agencesAvecLivreurs++; }
-      const nbSecurite = parseInt(r.rec.nb_agents_securite, 10);
-      if(!isNaN(nbSecurite)){ totalSecurite += nbSecurite; agencesAvecSecurite++; }
       tr.dataset.status = r.rec.approved ? "approved" : (r.rec.closed ? "closed" : "pending");
       tr.className = "clickable";
       tr.addEventListener("click", ()=> openHistory(r.name, tr));
@@ -2593,22 +2598,6 @@ async function buildDashboard(){
   document.getElementById("dashStatusFilter").style.display = "";
   applyDashFilters();
   buildTopFlop();
-
-  const pillTotal = document.getElementById("pillTotalEmployes");
-  const pillLivreurs = document.getElementById("pillTotalLivreurs");
-  const pillSecurite = document.getElementById("pillTotalSecurite");
-  if(showEmployesCol){
-    pillTotal.style.display = "flex";
-    document.getElementById("tbTotalEmployes").textContent = totalEmployes + " (" + agencesAvecEffectif + "/" + rows.length + " agences)";
-    pillLivreurs.style.display = "flex";
-    document.getElementById("tbTotalLivreurs").textContent = totalLivreurs + " (" + agencesAvecLivreurs + "/" + rows.length + " agences)";
-    pillSecurite.style.display = "flex";
-    document.getElementById("tbTotalSecurite").textContent = totalSecurite + " (" + agencesAvecSecurite + "/" + rows.length + " agences)";
-  } else {
-    pillTotal.style.display = "none";
-    pillLivreurs.style.display = "none";
-    pillSecurite.style.display = "none";
-  }
 
   statusEl.textContent = all.length+" visite"+(all.length>1?"s":"")+" enregistrée"+(all.length>1?"s":"")+" au total"
     + (currentRole==="manager" ? " (toutes agences, temps réel)" : "");
@@ -2737,21 +2726,9 @@ async function buildRegionAnomalies(){
   // groupe par agence : liste des points non conformes de sa dernière visite
   const agencyGroups = [];
   let totalPoints = 0;
-  let totalEmployesRegion = 0;
-  let agencesAvecEffectifRegion = 0;
-  let totalLivreursRegion = 0;
-  let agencesAvecLivreursRegion = 0;
-  let totalSecuriteRegion = 0;
-  let agencesAvecSecuriteRegion = 0;
   scopedAgences.forEach(name=>{
     const rec = byAgence[name.trim().toLowerCase()];
     if(!rec) return;
-    const nbEmployes = parseInt(rec.nb_employes, 10);
-    if(!isNaN(nbEmployes)){ totalEmployesRegion += nbEmployes; agencesAvecEffectifRegion++; }
-    const nbLivreurs = parseInt(rec.nb_livreurs, 10);
-    if(!isNaN(nbLivreurs)){ totalLivreursRegion += nbLivreurs; agencesAvecLivreursRegion++; }
-    const nbSecurite = parseInt(rec.nb_agents_securite, 10);
-    if(!isNaN(nbSecurite)){ totalSecuriteRegion += nbSecurite; agencesAvecSecuriteRegion++; }
     const points = isManagerView ? allNonConformPoints(rec) : drVisiblePoints(rec);
     if(points.length === 0) return;
     totalPoints += points.length;
@@ -2824,16 +2801,6 @@ async function buildRegionAnomalies(){
     +" · "+totalPoints+" point"+(totalPoints>1?"s":"")+" non conforme"+(totalPoints>1?"s":"")
     +(isManagerView ? " (toutes agences, visites approuvées, temps réel)" : " (région "+currentUserRegion+", visites approuvées, temps réel)");
 
-  const scopeLabel = isManagerView ? "toutes agences" : ("agences région " + currentUserRegion);
-  const pillTotal = document.getElementById("pillTotalEmployes");
-  pillTotal.style.display = "flex";
-  document.getElementById("tbTotalEmployes").textContent = totalEmployesRegion + " (" + agencesAvecEffectifRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
-  const pillLivreurs = document.getElementById("pillTotalLivreurs");
-  pillLivreurs.style.display = "flex";
-  document.getElementById("tbTotalLivreurs").textContent = totalLivreursRegion + " (" + agencesAvecLivreursRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
-  const pillSecurite = document.getElementById("pillTotalSecurite");
-  pillSecurite.style.display = "flex";
-  document.getElementById("tbTotalSecurite").textContent = totalSecuriteRegion + " (" + agencesAvecSecuriteRegion + "/" + scopedAgences.length + " " + scopeLabel + ")";
 }
 
 // Résumé de l'état de correction d'une visite, calculé à partir des tâches par point
@@ -3440,7 +3407,6 @@ function switchView(name){
   document.getElementById("tabAnnonce").classList.toggle("active", name==="annonce");
   document.getElementById("tabAdmin").classList.toggle("active", name==="admin");
   document.getElementById("ctxInspection").style.display = (name==="inspection") ? "flex" : "none";
-  document.getElementById("ctxDashboard").style.display = (name==="dashboard") ? "flex" : "none";
   if(name==="overview") buildOverview();
   if(name==="dashboard") buildDashboard();
   if(name==="evolution") initEvolutionView();
