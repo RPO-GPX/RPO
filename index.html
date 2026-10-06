@@ -1112,6 +1112,7 @@
   </div>
   <div id="pvStaffing" style="padding:8px 2px;font-size:12px;"></div>
   <div class="pv-taux"><b style="font-size:14px;">TAUX DE CONFORMITÉ GLOBAL (pondéré)</b><span class="val" id="pvTaux">–</span></div>
+  <div id="pvEvolution" style="text-align:right;font-size:11.5px;font-weight:700;margin-top:2px;"></div>
   <div class="pv-appr" id="pvAppr">–</div>
 
   <div class="pv-sub">Détail des taux par section</div>
@@ -1137,6 +1138,7 @@
       <div class="sigline"></div>
     </div>
   </div>
+  <div id="pvFooter" style="margin-top:14px;font-size:10px;color:#888;text-align:center;"></div>
 </div>
 
 <!-- ================= PRINT VIEW — ORDRE DE MISSION ================= -->
@@ -2040,7 +2042,7 @@ function generateReference(){
   return computeReference(state.header.date, currentRecordId);
 }
 
-function buildPrintView(){
+async function buildPrintView(){
   const {weighted, rows, ncList, appreciation} = recompute();
   document.getElementById("pvReference").textContent = generateReference();
   document.getElementById("pvDate").textContent = state.header.date || "-";
@@ -2059,6 +2061,40 @@ function buildPrintView(){
   document.getElementById("pvStaffing").innerHTML = staffingHTML
     || `<span style="color:#999;font-style:italic;">Données colis/effectifs insuffisantes pour le calcul.</span>`;
   document.getElementById("pvTaux").textContent = weighted===null?"–":Math.round(weighted*100)+"%";
+
+  // Évolution par rapport à la visite précédente (clôturée/approuvée) de cette même agence
+  const pvEvolEl = document.getElementById("pvEvolution");
+  pvEvolEl.textContent = "";
+  try{
+    const agence = (state.header.agence||"").trim();
+    const curDate = state.header.date||"";
+    if(weighted!==null && agence && curDate){
+      const { data: prevRows, error: prevErr } = await sb.from("visites")
+        .select("date, taux")
+        .eq("agence", agence)
+        .lt("date", curDate)
+        .or("closed.eq.true,approved.eq.true")
+        .not("taux", "is", null)
+        .order("date", {ascending:false})
+        .limit(1);
+      if(!prevErr && prevRows && prevRows[0]){
+        const prev = prevRows[0];
+        const delta = Math.round(weighted*100) - Math.round(prev.taux*100);
+        const arrow = delta>0 ? "▲" : (delta<0 ? "▼" : "▬");
+        const sign = delta>0 ? "+" : "";
+        const color = delta>0 ? "#1a7f37" : (delta<0 ? "#a11313" : "#666");
+        pvEvolEl.style.color = color;
+        pvEvolEl.textContent = arrow+" "+sign+delta+" pt"+(Math.abs(delta)>1?"s":"")+" vs visite du "+prev.date;
+      }
+    }
+  }catch(e){ pvEvolEl.textContent = ""; }
+
+  // Pied de page : horodatage de génération du document
+  const now = new Date();
+  const pad = (n)=> String(n).padStart(2,"0");
+  document.getElementById("pvFooter").textContent =
+    "Document généré automatiquement par OpTrack le "+pad(now.getDate())+"/"+pad(now.getMonth()+1)+"/"+now.getFullYear()+
+    " à "+pad(now.getHours())+":"+pad(now.getMinutes());
 
   const apprEl = document.getElementById("pvAppr");
   let apprText="–", bg="#eee", fg="#333";
@@ -3373,7 +3409,7 @@ async function openHistory(agenceName, anchorRow){
         await loadRecordById(r.id);
         document.body.classList.remove("print-om");
         document.body.classList.add("print-visit");
-        buildPrintView();
+        await buildPrintView();
         setTimeout(()=> window.print(), 50);
       });
     }
@@ -5592,10 +5628,10 @@ document.getElementById("btnClose").addEventListener("click", async ()=>{
   }catch(e){ showToast("Clôture impossible — réessaie.", 4000); }
 });
 
-document.getElementById("btnPrint").addEventListener("click", ()=>{
+document.getElementById("btnPrint").addEventListener("click", async ()=>{
   document.body.classList.remove("print-om");
   document.body.classList.add("print-visit");
-  buildPrintView();
+  await buildPrintView();
   setTimeout(()=> window.print(), 50);
 });
 
